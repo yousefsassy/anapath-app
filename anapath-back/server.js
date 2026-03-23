@@ -1,0 +1,61 @@
+import dotenv from 'dotenv';
+import net from 'node:net';
+import app from './src/app.js';
+
+dotenv.config();
+
+const DEFAULT_PORT = Number(process.env.PORT) || 5000;
+const MAX_PORT_ATTEMPTS = 10;
+
+function isPortAvailable(port) {
+  return new Promise((resolve) => {
+    const tester = net.createServer();
+
+    tester.once('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        resolve(false);
+        return;
+      }
+      resolve(false);
+    });
+
+    tester.once('listening', () => {
+      tester.close(() => resolve(true));
+    });
+
+    tester.listen(port);
+  });
+}
+
+async function startServer() {
+  let selectedPort = DEFAULT_PORT;
+
+  for (let i = 0; i <= MAX_PORT_ATTEMPTS; i += 1) {
+    const available = await isPortAvailable(selectedPort);
+    if (available) {
+      break;
+    }
+
+    if (i === MAX_PORT_ATTEMPTS) {
+      console.error(
+        `No free port found between ${DEFAULT_PORT} and ${selectedPort}`
+      );
+      process.exit(1);
+    }
+
+    selectedPort += 1;
+  }
+
+  if (selectedPort !== DEFAULT_PORT) {
+    console.warn(
+      `Port ${DEFAULT_PORT} is busy. Backend is starting on ${selectedPort}.`
+    );
+  }
+
+  app.listen(selectedPort, () => {
+    console.log(`Anapath backend running on port ${selectedPort}`);
+    console.log(`Open: http://localhost:${selectedPort}/api/health`);
+  });
+}
+
+startServer();
