@@ -1,19 +1,23 @@
 import type { ReactNode } from 'react'
+import { Breadcrumb } from './navigation'
+import type { BreadcrumbItem } from './navigation'
 
 interface PageHeaderProps {
   title: string
   subtitle?: string
   action?: ReactNode
+  breadcrumbs?: BreadcrumbItem[]
 }
 
-export function PageHeader({ title, subtitle, action }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, action, breadcrumbs = [] }: PageHeaderProps) {
   return (
     <div className="page-header">
-      <div>
+      <div className="page-header-content">
+        {breadcrumbs.length > 0 ? <Breadcrumb items={breadcrumbs} /> : null}
         <h1>{title}</h1>
         {subtitle ? <p>{subtitle}</p> : null}
       </div>
-      {action ? <div>{action}</div> : null}
+      {action ? <div className="page-header-action">{action}</div> : null}
     </div>
   )
 }

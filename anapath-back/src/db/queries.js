@@ -31,16 +31,43 @@ export async function insertPatient(payload) {
   return result.rows[0];
 }
 
+export async function updatePatientById(patientId, payload) {
+  const result = await query(
+    `UPDATE patients
+     SET
+       first_name = COALESCE($2, first_name),
+       last_name = COALESCE($3, last_name),
+       age = COALESCE($4, age),
+       sex = COALESCE($5, sex),
+       phone = COALESCE($6, phone),
+       general_history = COALESCE($7, general_history),
+       updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [
+      patientId,
+      payload.first_name,
+      payload.last_name,
+      payload.age,
+      payload.sex,
+      payload.phone,
+      payload.general_history,
+    ]
+  );
+
+  return result.rows[0] || null;
+}
+
 export async function findExamsByPatientId(patientId) {
   const result = await query(
-    'SELECT * FROM exams WHERE patient_id = $1 ORDER BY id ASC',
+    'SELECT * FROM exams WHERE patient_id = $1 ORDER BY created_at DESC',
     [patientId]
   );
   return result.rows;
 }
 
 export async function findAllExams() {
-  const result = await query('SELECT * FROM exams ORDER BY id ASC');
+  const result = await query('SELECT * FROM exams ORDER BY created_at DESC');
   return result.rows;
 }
 
@@ -49,8 +76,38 @@ export async function findExamById(examId) {
   return result.rows[0] || null;
 }
 
-export async function findExamByPatientId(patientId) {
-  const result = await query('SELECT id FROM patients WHERE id = $1', [patientId]);
+export async function updateExamById(examId, payload) {
+  const result = await query(
+    `UPDATE exams
+     SET
+       exam_type = COALESCE($2, exam_type),
+       clinic_name = COALESCE($3, clinic_name),
+       requesting_doctor = COALESCE($4, requesting_doctor),
+       requested_date = COALESCE($5, requested_date),
+       registered_date = COALESCE($6, registered_date),
+       result_issued_date = COALESCE($7, result_issued_date),
+       sample_nature = COALESCE($8, sample_nature),
+       exam_history = COALESCE($9, exam_history),
+       diagnosis_keywords = COALESCE($10, diagnosis_keywords),
+       status = COALESCE($11, status),
+       updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [
+      examId,
+      payload.exam_type,
+      payload.clinic_name,
+      payload.requesting_doctor,
+      payload.requested_date,
+      payload.registered_date,
+      payload.result_issued_date,
+      payload.sample_nature,
+      payload.exam_history,
+      payload.diagnosis_keywords,
+      payload.status,
+    ]
+  );
+
   return result.rows[0] || null;
 }
 

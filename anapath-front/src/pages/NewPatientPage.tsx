@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { FormField } from '../components/FormField'
 import { PageHeader } from '../components/PageHeader'
+import { PageContainer } from '../layouts/PageContainer'
 import { patientService } from '../services/patientService'
 import type { NewPatientInput, SexDisplay } from '../types/domain'
 
@@ -51,82 +52,113 @@ export function NewPatientPage() {
   }
 
   return (
-    <div>
-      <PageHeader title="New Patient" subtitle="Create a patient medical profile" />
+    <PageContainer maxWidth="default">
+      <PageHeader
+        title="New Patient"
+        subtitle="Create a complete patient profile before registering pathology exams."
+      />
 
-      <section className="panel">
-        <form onSubmit={onSubmit} className="form-grid">
-          <FormField label="First Name" htmlFor="first_name">
-            <input
-              id="first_name"
-              value={form.first_name}
-              onChange={(event) => setForm({ ...form, first_name: event.target.value })}
-            />
-          </FormField>
+      <section className="panel form-panel">
+        <div className="form-panel-intro">
+          <h2>Patient Registration</h2>
+          <p>Capture core identity details and relevant medical context.</p>
+        </div>
 
-          <FormField label="Last Name" htmlFor="last_name">
-            <input
-              id="last_name"
-              value={form.last_name}
-              onChange={(event) => setForm({ ...form, last_name: event.target.value })}
-            />
-          </FormField>
+        <form onSubmit={onSubmit} className="form-layout">
+          <section className="form-section">
+            <div className="form-section-header">
+              <h3>Identity</h3>
+              <p>Required demographic details used across the clinical workflow.</p>
+            </div>
 
-          <FormField label="Age" htmlFor="age">
-            <input
-              id="age"
-              type="number"
-              min={1}
-              value={form.age || ''}
-              onChange={(event) =>
-                setForm({ ...form, age: Number(event.target.value) || 0 })
-              }
-            />
-          </FormField>
+            <div className="form-grid">
+              <FormField label="First Name" htmlFor="first_name">
+                <input
+                  id="first_name"
+                  value={form.first_name}
+                  onChange={(event) => setForm({ ...form, first_name: event.target.value })}
+                />
+              </FormField>
 
-          <FormField label="Sex" htmlFor="sex">
-            <select
-              id="sex"
-              value={form.sex}
-              onChange={(event) =>
-                setForm({ ...form, sex: event.target.value as SexDisplay })
-              }
-            >
-              <option value="Female">Female</option>
-              <option value="Male">Male</option>
-            </select>
-          </FormField>
+              <FormField label="Last Name" htmlFor="last_name">
+                <input
+                  id="last_name"
+                  value={form.last_name}
+                  onChange={(event) => setForm({ ...form, last_name: event.target.value })}
+                />
+              </FormField>
 
-          <FormField label="Phone" htmlFor="phone">
-            <input
-              id="phone"
-              value={form.phone}
-              onChange={(event) => setForm({ ...form, phone: event.target.value })}
-            />
-          </FormField>
+              <FormField label="Age" htmlFor="age">
+                <input
+                  id="age"
+                  type="number"
+                  min={1}
+                  value={form.age || ''}
+                  onChange={(event) =>
+                    setForm({ ...form, age: Number(event.target.value) || 0 })
+                  }
+                />
+              </FormField>
 
-          <div></div>
+              <FormField label="Sex" htmlFor="sex">
+                <select
+                  id="sex"
+                  value={form.sex}
+                  onChange={(event) =>
+                    setForm({ ...form, sex: event.target.value as SexDisplay })
+                  }
+                >
+                  <option value="Female">Female</option>
+                  <option value="Male">Male</option>
+                </select>
+              </FormField>
 
-          <FormField label="General History" htmlFor="general_history">
-            <textarea
-              id="general_history"
-              value={form.general_history}
-              onChange={(event) =>
-                setForm({ ...form, general_history: event.target.value })
-              }
-              rows={4}
-            />
-          </FormField>
+              <FormField
+                label="Phone"
+                htmlFor="phone"
+                helperText="Optional but useful for follow-up communication."
+              >
+                <input
+                  id="phone"
+                  value={form.phone}
+                  onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                />
+              </FormField>
+            </div>
+          </section>
+
+          <section className="form-section">
+            <div className="form-section-header">
+              <h3>Clinical Context</h3>
+              <p>General medical history that may support exam interpretation.</p>
+            </div>
+
+            <div className="form-grid">
+              <FormField label="General History" htmlFor="general_history">
+                <textarea
+                  id="general_history"
+                  value={form.general_history}
+                  onChange={(event) =>
+                    setForm({ ...form, general_history: event.target.value })
+                  }
+                  rows={5}
+                />
+              </FormField>
+            </div>
+          </section>
 
           {error ? <p className="error-message">{error}</p> : null}
 
-          <div className="form-actions">
+          <div className="form-actions form-actions-sticky">
+            <Link to="/patients" className="button tertiary">
+              Cancel
+            </Link>
             <button className="button" type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Saving...' : 'Create Patient'}
             </button>
           </div>
         </form>
       </section>
-    </div>
+    </PageContainer>
   )
 }

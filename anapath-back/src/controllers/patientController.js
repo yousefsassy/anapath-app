@@ -3,6 +3,7 @@ import {
   findPatientById,
   insertPatient,
   findExamsByPatientId,
+  updatePatientById,
 } from '../db/queries.js';
 
 function validatePatientPayload(payload) {
@@ -94,6 +95,80 @@ export async function getPatientExams(req, res, next) {
         exams: patientExams,
         count: patientExams.length,
       },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+const EDITABLE_FIELDS = [
+  'first_name',
+  'last_name',
+  'age',
+  'sex',
+  'phone',
+  'general_history',
+];
+
+const READ_ONLY_FIELDS = [
+  'id',
+  'laboratory_id',
+  'birth_date',
+  'created_at',
+  'updated_at',
+];
+
+export async function updatePatient(req, res, next) {
+  try {
+    const patientId = Number(req.params.id);
+    const patient = await findPatientById(patientId);
+
+    if (!patient) {
+      return res.status(404).json({ success: false, message: 'Patient not found' });
+    }
+
+    const forbiddenField = READ_ONLY_FIELDS.find((field) => req.body[field] !== undefined);
+    if (forbiddenField) {
+      return res.status(400).json({
+        success: false,
+        message: `${forbiddenField} is read-only and cannot be updated`,
+      });
+    }
+
+    if (
+      req.body.age !== undefined &&
+      (!Number.isInteger(Number(req.body.age)) || Number(req.body.age) < 0)
+    ) {
+      return res.status(400).json({ success: false, message: 'age must be a valid positive number' });
+    }
+
+    if (req.body.sex !== undefined && !['M', 'F'].includes(String(req.body.sex).toUpperCase())) {
+      return res.status(400).json({ success: false, message: 'sex must be M or F' });
+    }
+
+    const updatePayload = Object.fromEntries(
+      EDITABLE_FIELDS
+        .filter((field) => req.body[field] !== undefined)
+        .map((field) => [field, field === 'sex' ? String(req.body[field]).toUpperCase() : req.body[field]])
+    );
+
+    if (Object.keys(updatePayload).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No editable fields provided for update',
+      });
+    }
+
+    if (updatePayload.age !== undefined) {
+      updatePayload.age = Number(updatePayload.age);
+    }
+
+    const updatedPatient = await updatePatientById(patientId, updatePayload);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Patient updated successfully',
+      data: updatedPatient,
     });
   } catch (error) {
     return next(error);

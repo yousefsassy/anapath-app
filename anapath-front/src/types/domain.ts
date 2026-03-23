@@ -67,7 +67,6 @@ export interface NewPatientInput {
 
 export interface NewExamInput {
   patient_id: number | string
-  exam_number: string
   exam_type: ExamType
   clinic_name: string
   requesting_doctor: string

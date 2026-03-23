@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { Activity, ClipboardCheck, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
+import { PageContainer } from '../layouts/PageContainer'
 import { patientService } from '../services/patientService'
 import { examService } from '../services/examService'
 import type { Exam, Patient } from '../types/domain'
@@ -24,42 +26,76 @@ export function DashboardPage() {
   }, [])
 
   const pendingExams = data.exams.filter((exam) => exam.status !== 'completed').length
+  const completedExams = data.exams.filter((exam) => exam.status === 'completed').length
+  const completionRate = data.exams.length > 0 ? Math.round((completedExams / data.exams.length) * 100) : 0
   const recentExams = [...data.exams].slice(0, 5)
 
   return (
-    <div>
+    <PageContainer maxWidth="wide">
       <PageHeader
         title="Dashboard"
-        subtitle="Quick overview of pathology activity"
+        subtitle="Operational overview of your pathology workflow and report load."
         action={
           <Link to="/patients/new" className="button">
-            Add New Patient
+            New Patient
           </Link>
         }
       />
 
-      <section className="stats-grid">
-        <article className="stat-card">
-          <p>Total Patients</p>
+      <section className="dashboard-overview panel">
+        <div className="dashboard-overview-content">
+          <h2>Clinical Activity Summary</h2>
+          <p>
+            Track registration load, pending work, and report throughput in one place before
+            moving into detailed case management.
+          </p>
+        </div>
+        <div className="dashboard-overview-metric" aria-live="polite">
+          <span>Report Completion</span>
+          <strong>{completionRate}%</strong>
+        </div>
+      </section>
+
+      <section className="stats-grid dashboard-stats-grid">
+        <article className="stat-card dashboard-stat-card">
+          <div className="dashboard-stat-head">
+            <span>Total Patients</span>
+            <Users size={16} strokeWidth={2} aria-hidden="true" />
+          </div>
           <strong>{data.patients.length}</strong>
+          <p>Patients currently registered in the lab system.</p>
         </article>
-        <article className="stat-card">
-          <p>Total Exams</p>
+
+        <article className="stat-card dashboard-stat-card">
+          <div className="dashboard-stat-head">
+            <span>Total Exams</span>
+            <Activity size={16} strokeWidth={2} aria-hidden="true" />
+          </div>
           <strong>{data.exams.length}</strong>
+          <p>All pathology exams logged across active records.</p>
         </article>
-        <article className="stat-card">
-          <p>Pending / In Progress</p>
+
+        <article className="stat-card dashboard-stat-card dashboard-stat-card--highlight">
+          <div className="dashboard-stat-head">
+            <span>Pending / In Progress</span>
+            <ClipboardCheck size={16} strokeWidth={2} aria-hidden="true" />
+          </div>
           <strong>{pendingExams}</strong>
+          <p>Exams requiring follow-up and report completion.</p>
         </article>
       </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <h2>Recent Exams</h2>
+      <section className="panel dashboard-recent-panel">
+        <div className="panel-header dashboard-recent-header">
+          <div>
+            <h2>Recent Exams</h2>
+            <p>Latest registered exams requiring review or report updates.</p>
+          </div>
+          <span className="dashboard-recent-count">{recentExams.length} recent</span>
         </div>
 
         <div className="table-wrapper">
-          <table>
+          <table className="dashboard-table">
             <thead>
               <tr>
                 <th>Exam Number</th>
@@ -72,7 +108,14 @@ export function DashboardPage() {
             <tbody>
               {recentExams.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>No exam available yet.</td>
+                  <td colSpan={5}>
+                    <div className="table-state-cell">
+                      <p className="state-block-title">No recent exams available yet.</p>
+                      <p className="state-block-description">
+                        New exams will appear here once patient exam registration starts.
+                      </p>
+                    </div>
+                  </td>
                 </tr>
               ) : (
                 recentExams.map((exam) => (
@@ -95,6 +138,6 @@ export function DashboardPage() {
           </table>
         </div>
       </section>
-    </div>
+    </PageContainer>
   )
 }

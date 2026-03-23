@@ -1,4 +1,4 @@
-import type { Exam, NewExamInput, ReportInput } from '../types/domain'
+import type { Exam, ExamStatus, NewExamInput, ReportInput } from '../types/domain'
 import { apiClient } from './apiClient'
 import { authService } from './authService'
 import { mapExamStatusToBackend } from '../utils/domainMappings'
@@ -16,6 +16,32 @@ interface CreateExamPayload {
   exam_history: string
   diagnosis_keywords: string[]
   status: 'registered' | 'in_progress' | 'completed'
+}
+
+interface UpdateExamPayload {
+  exam_type?: string
+  clinic_name?: string
+  requesting_doctor?: string
+  requested_date?: string | null
+  registered_date?: string | null
+  result_issued_date?: string | null
+  sample_nature?: string
+  exam_history?: string
+  diagnosis_keywords?: string[]
+  status?: 'registered' | 'in_progress' | 'completed'
+}
+
+export interface UpdateExamInput {
+  exam_type: string
+  clinic_name: string
+  requesting_doctor: string
+  requested_date: string
+  registered_date: string
+  result_issued_date: string
+  sample_nature: string
+  exam_history: string
+  diagnosis_keywords: string
+  status: ExamStatus
 }
 
 const toNullableDate = (value: string) => (value.trim() ? value : null)
@@ -82,6 +108,31 @@ export const examService = {
     }
 
     return apiClient.post<Exam>('/exams', requestBody)
+  },
+
+  update: async (id: number | string, payload: UpdateExamInput): Promise<Exam | null> => {
+    try {
+      const requestBody: UpdateExamPayload = {
+        exam_type: payload.exam_type,
+        clinic_name: payload.clinic_name,
+        requesting_doctor: payload.requesting_doctor,
+        requested_date: toNullableDate(payload.requested_date),
+        registered_date: toNullableDate(payload.registered_date),
+        result_issued_date: toNullableDate(payload.result_issued_date),
+        sample_nature: payload.sample_nature,
+        exam_history: payload.exam_history,
+        diagnosis_keywords: toDiagnosisKeywordsArray(payload.diagnosis_keywords),
+        status: mapExamStatusToBackend(payload.status),
+      }
+
+      return await apiClient.put<Exam>(`/exams/${id}`, requestBody)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (message.toLowerCase().includes('not found')) {
+        return null
+      }
+      throw error
+    }
   },
 
   updateReport: async (id: number | string, report: ReportInput): Promise<Exam | null> => {
