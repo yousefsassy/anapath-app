@@ -1,4 +1,4 @@
-import type { Exam, NewPatientInput, Patient } from '../types/domain'
+import type { Exam, ExamWithReportSummary, NewPatientInput, Patient } from '../types/domain'
 import { apiClient } from './apiClient'
 import { authService } from './authService'
 import { mapSexDisplayToBackend } from '../utils/domainMappings'
@@ -15,6 +15,12 @@ export interface UpdatePatientInput {
 interface PatientExamsResponse {
   patient: Patient
   exams: Exam[]
+  count: number
+}
+
+interface PatientExamsWithSummaryResponse {
+  patient: Patient
+  exams: ExamWithReportSummary[]
   count: number
 }
 
@@ -37,6 +43,13 @@ export const patientService = {
 
   getExamsByPatientId: async (id: number | string): Promise<Exam[]> => {
     const response = await apiClient.get<PatientExamsResponse>(`/patients/${id}/exams`)
+    return response.exams
+  },
+
+  getExamsWithReportSummary: async (id: number | string): Promise<ExamWithReportSummary[]> => {
+    const response = await apiClient.get<PatientExamsWithSummaryResponse>(
+      `/patients/${id}/exams?include=report_summary`
+    )
     return response.exams
   },
 

@@ -24,8 +24,8 @@ The backend provides the Anapath V1 API for doctor-only workflow operations:
 - `GET /api/health` -> `healthController.getHealth`
 - `POST /api/auth/login` -> `authController.login`
 - `GET/POST/GET:id/PUT:id /api/patients` -> `patientController`
-- `GET /api/patients/:id/exams` -> `patientController.getPatientExams`
-- `GET/POST/GET:id/PUT:id /api/exams` -> `examController`
+- `GET /api/patients/:id/exams` -> `patientController.getPatientExams` (supports `?include=report_summary`)
+- `GET/POST/GET:id/PUT:id /api/exams` -> `examController` (`GET /api/exams` supports `?status=` filter)
 - `GET/PUT /api/reports/:examId` -> `reportController`
 - Data access is centralized in `src/db/queries.js`
 
@@ -34,6 +34,8 @@ The backend provides the Anapath V1 API for doctor-only workflow operations:
 - Login checks `users` table and returns placeholder token payload
 - Patient create/detail/list/update with validation and read-only field protection
 - Exam create/detail/list/update with validation and read-only field protection
+- `GET /api/exams` accepts optional `?status=registered|in_progress|completed` filter; returns 400 for invalid values; LEFT JOINs patients to include `patient_first_name`, `patient_last_name`
+- `GET /api/patients/:id/exams` accepts optional `?include=report_summary`; when set, LEFT JOINs reports and returns `report_summary: { conclusion, updated_at } | null` per exam (uses `findExamsByPatientIdWithReportSummary`)
 - Transactional exam creation with persistent `exam_number` generation via `exam_sequences`
 - Auto-create-empty-report behavior on report update when report row is missing
 - Recency ordering consistency:
@@ -55,7 +57,7 @@ The backend provides the Anapath V1 API for doctor-only workflow operations:
   - no JWT signing/verification middleware
   - no route-level authorization enforcement
 - No RBAC or multi-tenant authorization checks beyond stored IDs
-- No pagination/filter query support for list endpoints
+- No pagination support for list endpoints
 - No automated backend test suite currently present
 
 ## Session Guidance

@@ -7,8 +7,9 @@ import { StatusBadge } from '../components/StatusBadge'
 import { PageContainer } from '../layouts/PageContainer'
 import { patientService } from '../services/patientService'
 import type { UpdatePatientInput } from '../services/patientService'
-import type { Exam, Patient } from '../types/domain'
-import { mapSexBackendToDisplay } from '../utils/domainMappings'
+import type { ExamWithReportSummary, Patient } from '../types/domain'
+import { displaySexFrench, mapSexBackendToDisplay } from '../utils/domainMappings'
+import { formatDate, truncate } from '../utils/formatting'
 
 const emptyPatientForm: UpdatePatientInput = {
   first_name: '',
@@ -30,12 +31,14 @@ function toPatientEditForm(patient: Patient): UpdatePatientInput {
   }
 }
 
+
+
 export function PatientDetailPage() {
   const { id = '' } = useParams()
   const [patient, setPatient] = useState<Patient | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
-  const [exams, setExams] = useState<Exam[]>([])
+  const [exams, setExams] = useState<ExamWithReportSummary[]>([])
   const [examsLoading, setExamsLoading] = useState(true)
   const [examsError, setExamsError] = useState('')
   const [isEditingPatient, setIsEditingPatient] = useState(false)
@@ -48,29 +51,44 @@ export function PatientDetailPage() {
     const loadPatient = async () => {
       setIsLoading(true)
       setError('')
-
       try {
         const patientData = await patientService.getById(id)
         setPatient(patientData)
-        if (patientData) {
-          setPatientForm(toPatientEditForm(patientData))
-        }
+        if (patientData) setPatientForm(toPatientEditForm(patientData))
       } catch (loadError) {
-        const message = loadError instanceof Error ? loadError.message : 'Unable to load patient.'
-        setError(message)
+        setError(loadError instanceof Error ? loadError.message : 'Impossible de charger le patient.')
       } finally {
         setIsLoading(false)
       }
     }
-
     void loadPatient()
   }, [id])
 
-  const onEditPatient = () => {
+  useEffect(() => {
     if (!patient) {
+      setExams([])
+      setExamsLoading(false)
       return
     }
+    const loadExams = async () => {
+      setExamsLoading(true)
+      setExamsError('')
+      try {
+        const examData = await patientService.getExamsWithReportSummary(id)
+        setExams(examData)
+      } catch (loadError) {
+        setExamsError(
+          loadError instanceof Error ? loadError.message : 'Impossible de charger les prélèvements.'
+        )
+      } finally {
+        setExamsLoading(false)
+      }
+    }
+    void loadExams()
+  }, [id, patient])
 
+  const onEditPatient = () => {
+    if (!patient) return
     setPatientUpdateError('')
     setPatientUpdateInfo('')
     setPatientForm(toPatientEditForm(patient))
@@ -78,10 +96,7 @@ export function PatientDetailPage() {
   }
 
   const onCancelEditPatient = () => {
-    if (patient) {
-      setPatientForm(toPatientEditForm(patient))
-    }
-
+    if (patient) setPatientForm(toPatientEditForm(patient))
     setPatientUpdateError('')
     setPatientUpdateInfo('')
     setIsEditingPatient(false)
@@ -89,77 +104,44 @@ export function PatientDetailPage() {
 
   const onSubmitPatientUpdate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-
-    if (isPatientSubmitting) {
-      return
-    }
-
+    if (isPatientSubmitting) return
     setPatientUpdateError('')
     setPatientUpdateInfo('')
 
     if (!patientForm.first_name.trim() || !patientForm.last_name.trim()) {
-      setPatientUpdateError('First name and last name are required.')
+      setPatientUpdateError('Le prénom et le nom sont obligatoires.')
       return
     }
-
     if (patientForm.age <= 0) {
-      setPatientUpdateError('Age must be greater than 0.')
+      setPatientUpdateError("L'âge doit être supérieur à 0.")
       return
     }
 
     setIsPatientSubmitting(true)
-
     try {
       const updatedPatient = await patientService.update(id, patientForm)
-
       if (!updatedPatient) {
-        setPatientUpdateError('Patient not found for update.')
+        setPatientUpdateError('Patient introuvable pour la mise à jour.')
         return
       }
-
       setPatient(updatedPatient)
       setPatientForm(toPatientEditForm(updatedPatient))
       setIsEditingPatient(false)
-      setPatientUpdateInfo('Patient updated successfully.')
+      setPatientUpdateInfo('Patient mis à jour.')
     } catch (updateError) {
-      const message = updateError instanceof Error ? updateError.message : 'Unable to update patient.'
-      setPatientUpdateError(message)
+      setPatientUpdateError(
+        updateError instanceof Error ? updateError.message : 'Impossible de mettre à jour le patient.'
+      )
     } finally {
       setIsPatientSubmitting(false)
     }
   }
 
-  useEffect(() => {
-    const loadExams = async () => {
-      setExamsLoading(true)
-      setExamsError('')
-
-      try {
-        const examData = await patientService.getExamsByPatientId(id)
-        setExams(examData)
-      } catch (loadError) {
-        const message =
-          loadError instanceof Error ? loadError.message : 'Unable to load patient exams.'
-        setExamsError(message)
-      } finally {
-        setExamsLoading(false)
-      }
-    }
-
-    if (!patient) {
-      setExams([])
-      setExamsLoading(false)
-      return
-    }
-
-    void loadExams()
-  }, [id, patient])
-
   if (isLoading) {
     return (
       <PageContainer maxWidth="wide">
         <section className="panel">
-          <h2>Loading patient...</h2>
+          <p className="report-loading">Chargement du patient…</p>
         </section>
       </PageContainer>
     )
@@ -179,8 +161,8 @@ export function PatientDetailPage() {
     return (
       <PageContainer maxWidth="wide">
         <section className="panel">
-          <h2>Patient not found</h2>
-          <p>This patient does not exist.</p>
+          <h2>Patient introuvable</h2>
+          <p>Ce patient n'existe pas ou a été supprimé.</p>
         </section>
       </PageContainer>
     )
@@ -189,26 +171,26 @@ export function PatientDetailPage() {
   return (
     <PageContainer maxWidth="wide">
       <PageHeader
-        title={`${patient.first_name} ${patient.last_name}`}
-        subtitle="Patient profile and pathology exam timeline."
+        title={`${patient.last_name} ${patient.first_name}`}
+        subtitle="Dossier patient — informations et historique des prélèvements."
         breadcrumbs={[
-          { label: 'Dashboard', to: '/dashboard' },
+          { label: 'Accueil', to: '/dashboard' },
           { label: 'Patients', to: '/patients' },
-          { label: `${patient.first_name} ${patient.last_name}` },
+          { label: `${patient.last_name} ${patient.first_name}` },
         ]}
         action={
           <Link to={`/patients/${patient.id}/exams/new`} className="button">
-            Add New Exam
+            + Nouveau prélèvement
           </Link>
         }
       />
 
+      {/* Patient info */}
       <section className="panel">
         <form onSubmit={onSubmitPatientUpdate}>
           <div className="panel-header">
             <div>
-              <h2>Patient Information</h2>
-              <p>Core identity details and medical context for this patient.</p>
+              <h2>Informations patient</h2>
             </div>
             {isEditingPatient ? (
               <div className="form-actions">
@@ -218,10 +200,10 @@ export function PatientDetailPage() {
                   onClick={onCancelEditPatient}
                   disabled={isPatientSubmitting}
                 >
-                  Cancel
+                  Annuler
                 </button>
                 <button type="submit" className="button" disabled={isPatientSubmitting}>
-                  {isPatientSubmitting ? 'Saving...' : 'Save Patient'}
+                  {isPatientSubmitting ? 'Enregistrement…' : 'Enregistrer'}
                 </button>
               </div>
             ) : (
@@ -231,83 +213,82 @@ export function PatientDetailPage() {
                 onClick={onEditPatient}
                 disabled={isLoading || isPatientSubmitting}
               >
-                Edit Patient
+                Modifier
               </button>
             )}
           </div>
 
           {patientUpdateError ? <p className="error-message">{patientUpdateError}</p> : null}
-          {isPatientSubmitting ? <p className="report-loading">Saving patient...</p> : null}
+          {isPatientSubmitting ? <p className="report-loading">Enregistrement…</p> : null}
           {patientUpdateInfo ? <p className="success-message">{patientUpdateInfo}</p> : null}
 
           {isEditingPatient ? (
             <section className="form-section">
               <div className="form-grid">
-                <FormField label="First Name" htmlFor="first_name">
+                <FormField label="Prénom" htmlFor="first_name">
                   <input
                     id="first_name"
                     value={patientForm.first_name}
-                    onChange={(event) =>
-                      setPatientForm({ ...patientForm, first_name: event.target.value })
-                    }
+                    onChange={(e) => setPatientForm({ ...patientForm, first_name: e.target.value })}
                     disabled={isPatientSubmitting}
                   />
                 </FormField>
 
-                <FormField label="Last Name" htmlFor="last_name">
+                <FormField label="Nom" htmlFor="last_name">
                   <input
                     id="last_name"
                     value={patientForm.last_name}
-                    onChange={(event) =>
-                      setPatientForm({ ...patientForm, last_name: event.target.value })
-                    }
+                    onChange={(e) => setPatientForm({ ...patientForm, last_name: e.target.value })}
                     disabled={isPatientSubmitting}
                   />
                 </FormField>
 
-                <FormField label="Age" htmlFor="age">
+                <FormField label="Âge" htmlFor="age">
                   <input
                     id="age"
                     type="number"
                     min={1}
                     value={patientForm.age || ''}
-                    onChange={(event) =>
-                      setPatientForm({ ...patientForm, age: Number(event.target.value) || 0 })
+                    onChange={(e) =>
+                      setPatientForm({ ...patientForm, age: Number(e.target.value) || 0 })
                     }
                     disabled={isPatientSubmitting}
                   />
                 </FormField>
 
-                <FormField label="Sex" htmlFor="sex">
+                <FormField label="Sexe" htmlFor="sex">
                   <select
                     id="sex"
                     value={patientForm.sex}
-                    onChange={(event) =>
-                      setPatientForm({ ...patientForm, sex: event.target.value as UpdatePatientInput['sex'] })
+                    onChange={(e) =>
+                      setPatientForm({
+                        ...patientForm,
+                        sex: e.target.value as UpdatePatientInput['sex'],
+                      })
                     }
                     disabled={isPatientSubmitting}
                   >
-                    <option value="Female">Female</option>
-                    <option value="Male">Male</option>
+                    <option value="Female">Femme</option>
+                    <option value="Male">Homme</option>
                   </select>
                 </FormField>
 
-                <FormField label="Phone" htmlFor="phone">
+                <FormField label="Téléphone" htmlFor="phone">
                   <input
                     id="phone"
                     value={patientForm.phone}
-                    onChange={(event) => setPatientForm({ ...patientForm, phone: event.target.value })}
+                    onChange={(e) => setPatientForm({ ...patientForm, phone: e.target.value })}
                     disabled={isPatientSubmitting}
                   />
                 </FormField>
 
-                <FormField label="General History" htmlFor="general_history">
+                <FormField label="Antécédents" htmlFor="general_history">
                   <textarea
                     id="general_history"
-                    rows={5}
+                    rows={4}
                     value={patientForm.general_history}
-                    onChange={(event) =>
-                      setPatientForm({ ...patientForm, general_history: event.target.value })
+                    onChange={(e) =>
+                      setPatientForm({ ...patientForm, general_history: e.target.value })
                     }
                     disabled={isPatientSubmitting}
                   />
@@ -317,77 +298,102 @@ export function PatientDetailPage() {
           ) : (
             <div className="detail-grid">
               <p>
-                <strong>Age:</strong> {patient.age}
+                <strong>Âge :</strong> {patient.age} ans
               </p>
               <p>
-                <strong>Sex:</strong> {mapSexBackendToDisplay(patient.sex)}
+                <strong>Sexe :</strong> {displaySexFrench(patient.sex)}
               </p>
               <p>
-                <strong>Phone:</strong> {patient.phone}
+                <strong>Téléphone :</strong> {patient.phone || '—'}
               </p>
               <p>
-                <strong>Created:</strong> {patient.created_at}
+                <strong>Enregistré le :</strong> {formatDate(patient.created_at)}
               </p>
               <p className="full-row">
-                <strong>General History:</strong> {patient.general_history || 'Not provided'}
+                <strong>Antécédents :</strong>{' '}
+                {patient.general_history || <em className="text-muted">Non renseigné</em>}
               </p>
             </div>
           )}
         </form>
       </section>
 
+      {/* Prélèvements */}
       <section className="panel">
         <div className="panel-header">
-          <h2>Exams</h2>
-          <p>Latest exams linked to this patient profile.</p>
+          <div>
+            <h2>Prélèvements</h2>
+            <p>Historique des prélèvements pour ce patient, du plus récent au plus ancien.</p>
+          </div>
         </div>
 
         <div className="table-wrapper">
-          <table>
+          <table className="patient-detail-exams-table">
             <thead>
               <tr>
-                <th>Exam Number</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th>Requested Date</th>
-                <th>Report</th>
+                <th>Réf.</th>
+                <th>Nature</th>
+                <th>Date réception</th>
+                <th>Statut</th>
+                <th>Conclusion</th>
+                <th aria-label="Action"></th>
               </tr>
             </thead>
             <tbody>
               {examsLoading ? (
                 <tr>
-                  <td colSpan={5}>
-                    <div className="table-state-cell">Loading exams...</div>
+                  <td colSpan={6}>
+                    <div className="table-state-cell">Chargement…</div>
                   </td>
                 </tr>
               ) : examsError ? (
                 <tr>
-                  <td colSpan={5}>
+                  <td colSpan={6}>
                     <div className="table-state-cell table-state-cell--danger">{examsError}</div>
                   </td>
                 </tr>
               ) : exams.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>
-                    <div className="table-state-cell">No exams found for this patient yet.</div>
+                  <td colSpan={6}>
+                    <div className="table-state-cell">
+                      <p className="state-block-title">Aucun prélèvement enregistré.</p>
+                      <p className="state-block-description">
+                        <Link
+                          to={`/patients/${patient.id}/exams/new`}
+                          className="text-link"
+                        >
+                          + Ajouter le premier prélèvement
+                        </Link>
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
-                exams.map((exam) => (
-                  <tr key={exam.id}>
-                    <td>{exam.exam_number}</td>
-                    <td>{exam.exam_type}</td>
-                    <td>
-                      <StatusBadge status={exam.status} />
-                    </td>
-                    <td>{exam.requested_date || '-'}</td>
-                    <td>
-                      <Link to={`/exams/${exam.id}`} className="text-link">
-                        Open
-                      </Link>
-                    </td>
-                  </tr>
-                ))
+                exams.map((exam) => {
+                  const conclusionPreview = truncate(exam.report_summary?.conclusion ?? '', 120)
+                  return (
+                    <tr key={exam.id} className="patient-detail-exam-row">
+                      <td className="patient-detail-exam-ref">{exam.exam_number}</td>
+                      <td>{exam.sample_nature || '—'}</td>
+                      <td>{formatDate(exam.registered_date)}</td>
+                      <td>
+                        <StatusBadge status={exam.status} />
+                      </td>
+                      <td className="patient-detail-conclusion-cell">
+                        {conclusionPreview ? (
+                          <span className="patient-detail-conclusion">{conclusionPreview}</span>
+                        ) : (
+                          <span className="patient-detail-no-conclusion">—</span>
+                        )}
+                      </td>
+                      <td>
+                        <Link to={`/exams/${exam.id}`} className="text-link">
+                          Ouvrir →
+                        </Link>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>

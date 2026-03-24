@@ -11,12 +11,12 @@ const sexBackendToDisplayMap: Record<SexBackend, SexDisplay> = {
 }
 
 const examStatusLabelMap: Record<ExamStatus, string> = {
-  registered: 'Registered',
-  in_progress: 'In Progress',
-  completed: 'Completed',
-  Pending: 'Pending',
-  'In Progress': 'In Progress',
-  Completed: 'Completed',
+  registered: 'Enregistré',
+  in_progress: 'En cours',
+  completed: 'Validé',
+  Pending: 'Enregistré',
+  'In Progress': 'En cours',
+  Completed: 'Validé',
 }
 
 export function mapSexDisplayToBackend(value: SexDisplay): SexBackend {
@@ -29,6 +29,14 @@ export function mapSexBackendToDisplay(value: SexBackend | SexDisplay): SexDispl
   }
 
   return sexBackendToDisplayMap[value]
+}
+
+/** Display-only: returns "Homme" or "Femme" regardless of the stored format. */
+export function displaySexFrench(value: string): string {
+  const s = String(value).trim().toUpperCase()
+  if (s === 'M' || s === 'MALE') return 'Homme'
+  if (s === 'F' || s === 'FEMALE') return 'Femme'
+  return value
 }
 
 export function getExamStatusLabel(status: ExamStatus): string {

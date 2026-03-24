@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { NavItem } from './NavItem'
 
 const navigation = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/dashboard', label: 'Accueil', icon: LayoutDashboard },
   { to: '/patients', label: 'Patients', icon: ClipboardList },
 ]
 
@@ -21,7 +21,7 @@ export function Sidebar() {
     <aside className="sidebar">
       <div className="brand-block">
         <h2>Anapath</h2>
-        <p>Anatomopathology Lab</p>
+        <p>Laboratoire d'Anatomopathologie</p>
       </div>
 
       <nav className="nav-menu" aria-label="Main navigation">
@@ -31,9 +31,9 @@ export function Sidebar() {
       </nav>
 
       <div className="sidebar-footer">
-        <p>Connected: {user?.email ?? 'Doctor'}</p>
+        <p>Connecté : {user?.email ?? 'Médecin'}</p>
         <button className="button secondary" onClick={onLogout}>
-          Log Out
+          Déconnexion
         </button>
       </div>
     </aside>

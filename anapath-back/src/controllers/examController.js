@@ -20,9 +20,21 @@ function validateExamPayload(payload) {
   return null;
 }
 
+const VALID_STATUSES = ['registered', 'in_progress', 'completed'];
+
 export async function getExams(req, res, next) {
   try {
-    const exams = await findAllExams();
+    const filters = {};
+    if (req.query.status) {
+      if (!VALID_STATUSES.includes(req.query.status)) {
+        return res.status(400).json({
+          success: false,
+          message: `Statut invalide. Valeurs acceptées : ${VALID_STATUSES.join(', ')}`,
+        });
+      }
+      filters.status = req.query.status;
+    }
+    const exams = await findAllExams(filters);
     return res.status(200).json({ success: true, data: exams });
   } catch (error) {
     return next(error);

@@ -66,8 +66,40 @@ export async function findExamsByPatientId(patientId) {
   return result.rows;
 }
 
-export async function findAllExams() {
-  const result = await query('SELECT * FROM exams ORDER BY created_at DESC');
+export async function findExamsByPatientIdWithReportSummary(patientId) {
+  const result = await query(
+    `SELECT e.*, r.conclusion AS report_conclusion, r.updated_at AS report_updated_at
+     FROM exams e
+     LEFT JOIN reports r ON r.exam_id = e.id
+     WHERE e.patient_id = $1
+     ORDER BY e.created_at DESC`,
+    [patientId]
+  );
+  return result.rows.map((row) => {
+    const { report_conclusion, report_updated_at, ...exam } = row;
+    return {
+      ...exam,
+      report_summary: report_conclusion !== null
+        ? { conclusion: report_conclusion, updated_at: report_updated_at }
+        : null,
+    };
+  });
+}
+
+export async function findAllExams(filters = {}) {
+  const baseQuery = `
+    SELECT e.*, p.first_name AS patient_first_name, p.last_name AS patient_last_name
+    FROM exams e
+    LEFT JOIN patients p ON p.id = e.patient_id
+  `;
+  if (filters.status) {
+    const result = await query(
+      `${baseQuery} WHERE e.status = $1 ORDER BY e.created_at DESC`,
+      [filters.status]
+    );
+    return result.rows;
+  }
+  const result = await query(`${baseQuery} ORDER BY e.created_at DESC`);
   return result.rows;
 }
 

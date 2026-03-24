@@ -39,7 +39,7 @@ export function LoginPage() {
       await login(form)
       navigate(nextRoute, { replace: true })
     } catch (submissionError) {
-      const message = submissionError instanceof Error ? submissionError.message : 'Login failed'
+      const message = submissionError instanceof Error ? submissionError.message : 'Échec de la connexion.'
       setError(message)
     } finally {
       setIsSubmitting(false)
@@ -49,32 +49,32 @@ export function LoginPage() {
   return (
     <section className="auth-page">
       <div className="auth-card">
-        <h1>Anapath Login</h1>
-        <p>Use your backend email and password.</p>
+        <h1>Anapath</h1>
+        <p>Connectez-vous avec votre adresse e-mail et votre mot de passe.</p>
 
         <form onSubmit={onSubmit} className="auth-form">
           <div className="form-field">
-            <label htmlFor="email">Email</label>
+            <label htmlFor="email">Adresse e-mail</label>
             <input
               id="email"
               name="email"
               type="email"
               value={form.email}
               onChange={onChange}
-              placeholder="doctor@anapath.local"
+              placeholder="medecin@anapath.local"
               autoComplete="email"
             />
           </div>
 
           <div className="form-field">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">Mot de passe</label>
             <input
               id="password"
               name="password"
               type="password"
               value={form.password}
               onChange={onChange}
-              placeholder="********"
+              placeholder="••••••••"
               autoComplete="current-password"
             />
           </div>
@@ -82,7 +82,7 @@ export function LoginPage() {
           {error ? <p className="error-message">{error}</p> : null}
 
           <button type="submit" className="button" disabled={isSubmitting}>
-            {isSubmitting ? 'Signing in...' : 'Sign In'}
+            {isSubmitting ? 'Connexion…' : 'Se connecter'}
           </button>
         </form>
       </div>

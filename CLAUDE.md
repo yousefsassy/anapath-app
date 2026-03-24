@@ -1,96 +1,211 @@
-# Anapath - Project Source of Truth
+# Anapath — Project Source of Truth
 
 ## Project Overview
-Anapath is a doctor-facing anatomopathology web app for managing patient records, pathology exams, and narrative reports.
 
-Current scope is a stable, doctor-only V1 for a single lab workflow.
+Anapath is a doctor-facing anatomopathology web app for managing patient records, pathology exams (prélèvements), and structured narrative reports (comptes rendus).
 
-## Doctor-Only User Model
-- Authentication exists via `POST /api/auth/login` using users stored in PostgreSQL.
-- Frontend stores the returned auth payload/token in localStorage and sends bearer headers.
-- Backend auth is still placeholder-level (no JWT verification middleware on protected routes yet).
-- Practical model today: a single authenticated doctor/admin workflow.
+Current scope: a stable, doctor-only V1 for a single-lab workflow. The UX is organized around the doctor's operational workflow, not around data entities.
+
+---
+
+## Language Rules
+
+- **UI language: French.** All user-facing labels, buttons, error messages, status names, field names, and navigation items are in French.
+- **DB and API values: unchanged.** Backend canonical values (`registered`, `in_progress`, `completed`, field names) are never renamed for display purposes. Translation happens in the display layer only.
+- **Code and comments: English.** Variable names, function names, TypeScript types, and code comments stay in English.
+
+---
+
+## Status Mapping (display only — DB values never change)
+
+| DB / API value | UI label |
+|---|---|
+| `registered` | Enregistré |
+| `in_progress` | En cours |
+| `completed` | Validé |
+
+Translation lives in `anapath-front/src/utils/domainMappings.ts` (`getStatusLabel`). Do not translate status values in the backend or in API responses.
+
+---
 
 ## Repo Structure
-- `anapath-front/` - React + Vite + TypeScript frontend
-- `anapath-back/` - Express + PostgreSQL backend
-- `anapath-back/src/db/schema.sql` and `anapath-back/src/db/seed.sql` - DB schema and seed data
 
-## Frontend Architecture and Main Pages
-- App shell:
-  - `anapath-front/src/App.tsx` defines routes
-  - protected routes via `anapath-front/src/routes/ProtectedRoute.tsx`
-  - layout via `anapath-front/src/layouts/MainLayout.tsx` and sidebar navigation
-- API integration:
-  - `anapath-front/src/services/apiClient.ts` uses `VITE_API_BASE_URL`
-  - service layer in `patientService.ts`, `examService.ts`, `authService.ts`
-- Core pages:
-  - `/login`
-  - `/dashboard`
-  - `/patients`
-  - `/patients/new`
-  - `/patients/:id`
-  - `/patients/:id/exams/new`
-  - `/exams/:id`
-- UX state handling is implemented in key forms/pages (loading, error, success, save/cancel/edit patterns).
+```
+anapath-app/
+├── anapath-back/         Express + PostgreSQL backend
+│   ├── server.js
+│   ├── src/app.js
+│   ├── src/routes/
+│   ├── src/controllers/
+│   ├── src/db/
+│   │   ├── queries.js    All SQL data access
+│   │   ├── schema.sql
+│   │   └── seed.sql
+│   └── src/config/database.js
+└── anapath-front/        React + Vite + TypeScript frontend
+    └── src/
+        ├── App.tsx               Route definitions
+        ├── components/           Shared UI (PageHeader, StatusBadge, FormField)
+        ├── context/              AuthContext
+        ├── layouts/              MainLayout + Sidebar
+        ├── pages/                Route-level page components
+        ├── routes/               ProtectedRoute
+        ├── services/             API service layer (apiClient, patientService, examService, authService)
+        ├── types/domain.ts       TypeScript domain types
+        └── utils/
+            ├── domainMappings.ts Status labels + sex display helpers
+            └── formatting.ts     formatDate(), truncate()
+```
 
-## Backend Architecture and Main Capabilities
-- Entry and routing:
-  - `anapath-back/server.js`
-  - `anapath-back/src/app.js`
-  - route groups in `anapath-back/src/routes/index.js`
-- API groups:
-  - `/api/health`
-  - `/api/auth`
-  - `/api/patients`
-  - `/api/exams`
-  - `/api/reports`
-- Implemented capabilities:
-  - health check with DB status
-  - login (placeholder credential check against `users` table)
-  - patient list/create/detail/update
-  - patient exams listing
-  - exam list/create/detail/update
-  - report get/update (with auto-create-on-update if missing)
-- Data layer:
-  - SQL query functions in `anapath-back/src/db/queries.js`
-  - transactional exam creation with persistent `exam_number` generation by lab/type/year via `exam_sequences`
+---
 
-## Completed End-to-End Workflows
-- Login -> authenticated navigation to dashboard
-- Create patient -> list/detail visibility
-- Update patient from patient detail (PUT)
-- Create exam from patient detail -> backend-generated `exam_number` -> appears in patient/dashboard tables
-- Update exam metadata from exam detail (PUT)
-- Read and update report from exam detail (GET/PUT)
+## Backend API
 
-## Recent Completed Work
-- Phase 2 frontend UX/UI polish across dashboard, patients, exam pages, and shared layout components
-- Exam update support added end-to-end (`PUT /api/exams/:id` + exam detail edit UI)
-- Patient update support added end-to-end (`PUT /api/patients/:id` + patient detail edit UI)
-- Dashboard recent exams ordering fixed to recency (`created_at DESC`)
-- Patient exams ordering aligned with dashboard (`created_at DESC`)
-- New exam cleanup:
-  - status values standardized to backend canonical values (`registered`, `in_progress`, `completed`)
-  - vestigial `exam_number` removed from new-exam input flow
-- Removed unused misleading backend helper (`findExamByPatientId`)
+**Base:** `http://localhost:5000`
 
-## Known Limitations / Intentionally Missing
-- Placeholder auth only:
-  - plaintext password check
-  - no JWT signing/verification middleware
-  - no backend route-level authorization enforcement
-- No RBAC/multi-role behavior in UI or API
-- No list pagination or server-side filtering for large datasets
-- No PDF export/signoff pipeline
-- No automated test suite currently in the repo
-- Frontend `ExamStatus` type still allows backend and legacy display variants (works, but not fully normalized)
+| Method | Route | Notes |
+|--------|-------|-------|
+| GET | `/api/health` | DB connectivity check |
+| POST | `/api/auth/login` | Placeholder credential check |
+| GET | `/api/patients` | List all patients |
+| POST | `/api/patients` | Create patient |
+| GET | `/api/patients/:id` | Patient detail |
+| PUT | `/api/patients/:id` | Update patient (editable fields only) |
+| GET | `/api/patients/:id/exams` | Patient's exams. Accepts `?include=report_summary` to JOIN reports and return `{ report_summary: { conclusion, updated_at } \| null }` per exam |
+| GET | `/api/exams` | All exams, `created_at DESC`. Accepts `?status=registered\|in_progress\|completed` filter (returns 400 for invalid values) |
+| POST | `/api/exams` | Create exam (triggers `exam_sequences` transaction) |
+| GET | `/api/exams/:id` | Exam detail |
+| PUT | `/api/exams/:id` | Update exam (editable fields only) |
+| GET | `/api/reports/:examId` | Exam's report |
+| PUT | `/api/reports/:examId` | Update report (auto-creates row if missing) |
 
-## Current Stability Status
-Core doctor-only V1 workflows are stable and integrated across frontend and backend. Recent regressions and consistency fixes have been applied, and the main CRUD/report workflows are functioning.
+**Response envelope:** `{ success: boolean, message?: string, data: T }`
 
-## Recommended Next Steps
-1. Harden auth/security (hashed passwords, JWT auth middleware, protected API authorization checks).
-2. Add integration tests for critical workflows (patient create/update, exam create/update, report update).
-3. Normalize frontend status typing to backend canonical values only.
-4. Add pagination/filter query support for patient and exam listings as data volume grows.
+**Exam number format:** generated by `exam_sequences` table:
+- Histology: `1-2026`, `2-2026`, …
+- Cytology: `C0001-2026`, `C0002-2026`, …
+
+---
+
+## Frontend Pages
+
+| Route | Page | Purpose |
+|-------|------|---------|
+| `/login` | LoginPage | Credential form |
+| `/dashboard` | DashboardPage | **Accueil / work queue** — status filter tabs + exam table, click row → exam workspace |
+| `/patients` | PatientsListPage | Patient directory — search/filter, inline prélèvements per row (lazy loaded), quick "+ Prélèvement" per row |
+| `/patients/new` | NewPatientPage | Create patient → redirects to patient detail |
+| `/patients/:id` | PatientDetailPage | Patient info (editable) + full prélèvements history with conclusion previews |
+| `/patients/:id/exams/new` | NewExamPage | Register new prélèvement → redirects to exam workspace |
+| `/exams/:id` | ExamDetailPage | **Main case workspace** — patient card, antécédents (other exams for this patient), exam metadata edit, compte rendu (4 sections), status action buttons |
+
+---
+
+## Domain Relationships
+
+```
+Patient
+ └── Exams (prélèvements)    one patient → many exams
+      └── Report (compte rendu)  one exam → one report (auto-created on first PUT)
+```
+
+**Report fields (4 structured sections):**
+- `clinical_info` — Renseignement clinique
+- `macroscopy` — Macroscopie
+- `microscopy` — Microscopie
+- `conclusion` — Conclusion
+
+**Exam type values:** `histology` | `cytology` (DB/API canonical)
+
+---
+
+## Key Frontend Files
+
+### Services
+- `examService.ts` — `list(status?)`, `getById`, `create`, `update`, `updateStatus`, `getReportByExamId`, `updateReport`
+- `patientService.ts` — `list`, `getById`, `create`, `update`, `getExamsByPatientId`, `getExamsWithReportSummary`
+
+### Shared Utilities
+- `utils/formatting.ts` — `formatDate(value)` (→ `dd/mm/yyyy` or `—`), `truncate(text, max)` (→ truncated with `…`)
+- `utils/domainMappings.ts` — `getStatusLabel(status)`, `displaySexFrench(value)`, `mapSexBackendToDisplay(value)`
+
+### Types (`types/domain.ts`)
+- `Patient`, `Exam`, `Report`
+- `ReportSummary { conclusion, updated_at }`
+- `ExamWithReportSummary` — extends `Exam` with `report_summary: ReportSummary | null`
+- `Exam` includes optional `patient_first_name?`, `patient_last_name?` (populated by `GET /api/exams` via LEFT JOIN)
+
+### Shared Components
+- `StatusBadge` — renders colored badge from DB status value
+- `PageHeader` — title, subtitle, breadcrumbs, optional action button
+- `FormField` — label + children wrapper
+
+---
+
+## Completed Workflows (end-to-end)
+
+- Login → authenticated session → Accueil work queue
+- Create patient → patient detail with empty exam list
+- Update patient info from patient detail (inline edit form)
+- Create prélèvement → exam workspace (redirects on save)
+- Update exam metadata from exam workspace (inline edit form)
+- Read + write 4-section compte rendu (auto-created on first save)
+- Status transitions via action buttons: registered → in_progress → completed
+- Accueil: filter exams by status tab (Tous / Enregistré / En cours / Validé)
+- Patient list: expand row to see recent prélèvements inline (lazy loaded, cached)
+- Patient detail: exams table shows conclusion preview (first 120 chars from report)
+- Exam workspace: antécédents section shows other exams for the same patient with conclusion preview (current exam excluded)
+
+---
+
+## Known Limitations / Intentionally Deferred
+
+- **Auth is placeholder:** plaintext password check, no JWT signing/verification, no route-level authorization middleware
+- **No RBAC** — single doctor/admin workflow only
+- **No pagination** — all lists load in full; defer until data volume is an issue
+- **No PDF export** — not in scope for V1
+- **No automated test suite** — manual regression testing only
+- **No CIN field** — requires schema migration, deferred
+- **No urgency flag** — nice-to-have, deferred
+
+---
+
+## Implementation Philosophy
+
+- Solve what is actually needed. Do not add features, configuration layers, or abstractions for hypothetical future use.
+- Keep DB schema and API response values stable. Display translation is the only acceptable transformation.
+- Prefer editing existing files over creating new ones.
+- Shared utilities (`formatting.ts`, `domainMappings.ts`) exist for things used across 3+ pages. Do not create helpers for one-off use.
+- Do not add pagination, server-side search, or extra endpoints unless the current approach causes a real visible problem.
+
+---
+
+## Working Norms
+
+- **After backend changes:** verify with `node --check src/db/queries.js` (or relevant file).
+- **After frontend changes:** verify with `npx tsc --noEmit` from `anapath-front/`.
+- **CSS variables:** use `var(--primary)` for accent color. `var(--accent)` is not defined.
+- **Button classes:** `.button` (primary), `.button.tertiary` (ghost/subtle). Do not use `.button.secondary` on light backgrounds — it is styled for dark sidebar contexts.
+- **Response envelope:** always return `{ success, data }` or `{ success, message }` from backend controllers. Never return raw arrays.
+- **Status transitions:** only forward transitions are exposed (registered → in_progress → completed). There is no reverse/undo button in the UI.
+- **Breadcrumbs:** every page that is not the root level should include breadcrumbs via `PageHeader`.
+
+---
+
+## Dev Commands
+
+```bash
+# Backend
+cd anapath-back && npm run dev     # starts on port 5000
+
+# Frontend
+cd anapath-front && npm run dev    # starts on port 5173
+
+# TypeScript check (frontend)
+cd anapath-front && npx tsc --noEmit
+
+# Syntax check (backend file)
+node --check anapath-back/src/db/queries.js
+```
+
+**Default login:** `admin@anapath.local` / `admin123`

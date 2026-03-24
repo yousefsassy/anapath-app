@@ -4,10 +4,10 @@ export function NotFoundPage() {
   return (
     <section className="auth-page">
       <div className="auth-card">
-        <h1>Page Not Found</h1>
-        <p>The route you requested does not exist.</p>
+        <h1>Page introuvable</h1>
+        <p>Cette adresse n'existe pas ou a été déplacée.</p>
         <Link to="/dashboard" className="button">
-          Go to Dashboard
+          Retour à l'accueil
         </Link>
       </div>
     </section>

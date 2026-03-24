@@ -1,135 +1,130 @@
 import { useEffect, useState } from 'react'
-import { Activity, ClipboardCheck, Users } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { PageContainer } from '../layouts/PageContainer'
-import { patientService } from '../services/patientService'
 import { examService } from '../services/examService'
-import type { Exam, Patient } from '../types/domain'
+import type { Exam } from '../types/domain'
+import { formatDate } from '../utils/formatting'
 
-interface DashboardState {
-  patients: Patient[]
-  exams: Exam[]
-}
+type StatusFilter = 'all' | 'registered' | 'in_progress' | 'completed'
+
+const STATUS_TABS: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'Tous' },
+  { value: 'registered', label: 'Enregistré' },
+  { value: 'in_progress', label: 'En cours' },
+  { value: 'completed', label: 'Validé' },
+]
+
 
 export function DashboardPage() {
-  const [data, setData] = useState<DashboardState>({ patients: [], exams: [] })
+  const navigate = useNavigate()
+  const [exams, setExams] = useState<Exam[]>([])
+  const [activeFilter, setActiveFilter] = useState<StatusFilter>('all')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const loadData = async () => {
-      const [patients, exams] = await Promise.all([patientService.list(), examService.list()])
-      setData({ patients, exams })
+    const loadExams = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const status = activeFilter === 'all' ? undefined : activeFilter
+        const data = await examService.list(status)
+        setExams(data)
+      } catch {
+        setError('Impossible de charger les prélèvements.')
+      } finally {
+        setLoading(false)
+      }
     }
 
-    void loadData()
-  }, [])
-
-  const pendingExams = data.exams.filter((exam) => exam.status !== 'completed').length
-  const completedExams = data.exams.filter((exam) => exam.status === 'completed').length
-  const completionRate = data.exams.length > 0 ? Math.round((completedExams / data.exams.length) * 100) : 0
-  const recentExams = [...data.exams].slice(0, 5)
+    void loadExams()
+  }, [activeFilter])
 
   return (
     <PageContainer maxWidth="wide">
       <PageHeader
-        title="Dashboard"
-        subtitle="Operational overview of your pathology workflow and report load."
+        title="Accueil"
+        subtitle="File de travail — prélèvements en cours et à traiter."
         action={
           <Link to="/patients/new" className="button">
-            New Patient
+            + Nouveau patient
           </Link>
         }
       />
 
-      <section className="dashboard-overview panel">
-        <div className="dashboard-overview-content">
-          <h2>Clinical Activity Summary</h2>
-          <p>
-            Track registration load, pending work, and report throughput in one place before
-            moving into detailed case management.
-          </p>
-        </div>
-        <div className="dashboard-overview-metric" aria-live="polite">
-          <span>Report Completion</span>
-          <strong>{completionRate}%</strong>
-        </div>
-      </section>
-
-      <section className="stats-grid dashboard-stats-grid">
-        <article className="stat-card dashboard-stat-card">
-          <div className="dashboard-stat-head">
-            <span>Total Patients</span>
-            <Users size={16} strokeWidth={2} aria-hidden="true" />
-          </div>
-          <strong>{data.patients.length}</strong>
-          <p>Patients currently registered in the lab system.</p>
-        </article>
-
-        <article className="stat-card dashboard-stat-card">
-          <div className="dashboard-stat-head">
-            <span>Total Exams</span>
-            <Activity size={16} strokeWidth={2} aria-hidden="true" />
-          </div>
-          <strong>{data.exams.length}</strong>
-          <p>All pathology exams logged across active records.</p>
-        </article>
-
-        <article className="stat-card dashboard-stat-card dashboard-stat-card--highlight">
-          <div className="dashboard-stat-head">
-            <span>Pending / In Progress</span>
-            <ClipboardCheck size={16} strokeWidth={2} aria-hidden="true" />
-          </div>
-          <strong>{pendingExams}</strong>
-          <p>Exams requiring follow-up and report completion.</p>
-        </article>
-      </section>
-
-      <section className="panel dashboard-recent-panel">
-        <div className="panel-header dashboard-recent-header">
-          <div>
-            <h2>Recent Exams</h2>
-            <p>Latest registered exams requiring review or report updates.</p>
-          </div>
-          <span className="dashboard-recent-count">{recentExams.length} recent</span>
+      <section className="panel">
+        <div className="accueil-filter-tabs">
+          {STATUS_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              className={`accueil-tab${activeFilter === tab.value ? ' accueil-tab--active' : ''}`}
+              onClick={() => setActiveFilter(tab.value)}
+              type="button"
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         <div className="table-wrapper">
           <table className="dashboard-table">
             <thead>
               <tr>
-                <th>Exam Number</th>
-                <th>Exam Type</th>
-                <th>Status</th>
-                <th>Requested Date</th>
-                <th>Action</th>
+                <th>Réf. Prélèvement</th>
+                <th>Patient</th>
+                <th>Nature</th>
+                <th>Date de réception</th>
+                <th>Statut</th>
               </tr>
             </thead>
             <tbody>
-              {recentExams.length === 0 ? (
+              {loading ? (
                 <tr>
                   <td colSpan={5}>
                     <div className="table-state-cell">
-                      <p className="state-block-title">No recent exams available yet.</p>
+                      <p className="state-block-description">Chargement…</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={5}>
+                    <div className="table-state-cell">
+                      <p className="state-block-title">{error}</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : exams.length === 0 ? (
+                <tr>
+                  <td colSpan={5}>
+                    <div className="table-state-cell">
+                      <p className="state-block-title">Aucun prélèvement trouvé.</p>
                       <p className="state-block-description">
-                        New exams will appear here once patient exam registration starts.
+                        Les prélèvements enregistrés apparaîtront ici.
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                recentExams.map((exam) => (
-                  <tr key={exam.id}>
-                    <td>{exam.exam_number}</td>
-                    <td>{exam.exam_type}</td>
+                exams.map((exam) => (
+                  <tr
+                    key={exam.id}
+                    className="accueil-row"
+                    onClick={() => navigate(`/exams/${exam.id}`)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <td className="accueil-ref">{exam.exam_number}</td>
+                    <td>
+                      {exam.patient_last_name && exam.patient_first_name
+                        ? `${exam.patient_last_name} ${exam.patient_first_name}`
+                        : '—'}
+                    </td>
+                    <td>{exam.sample_nature || '—'}</td>
+                    <td>{formatDate(exam.registered_date)}</td>
                     <td>
                       <StatusBadge status={exam.status} />
-                    </td>
-                    <td>{exam.requested_date}</td>
-                    <td>
-                      <Link to={`/exams/${exam.id}`} className="text-link">
-                        Open Report
-                      </Link>
                     </td>
                   </tr>
                 ))

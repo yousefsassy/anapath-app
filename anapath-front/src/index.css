@@ -999,6 +999,338 @@ td {
   line-height: 1.5;
 }
 
+/* Status badge: registered (maps to in_progress CSS was missing) */
+.status-badge.registered {
+  background: #f0f0f0;
+  color: #555;
+}
+
+/* Accueil work queue */
+.accueil-filter-tabs {
+  display: flex;
+  gap: 8px;
+  padding: var(--space-md) var(--space-md) 0;
+  flex-wrap: wrap;
+}
+
+.accueil-tab {
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.accueil-tab:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.accueil-tab--active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.accueil-row:hover td {
+  background: #f5f8ff;
+}
+
+.accueil-ref {
+  font-weight: 700;
+  color: var(--primary);
+  font-family: monospace;
+  font-size: 0.95rem;
+}
+
+/* Exam detail: status action buttons */
+.exam-detail-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.exam-status-btn {
+  font-size: 0.88rem;
+  padding: 7px 14px;
+  min-height: 34px;
+}
+
+.exam-status-btn--in_progress {
+  background: #1565a8;
+}
+
+.exam-status-btn--in_progress:hover {
+  background: #0d4d85;
+}
+
+.exam-status-btn--completed {
+  background: #236f3d;
+}
+
+.exam-status-btn--completed:hover {
+  background: #1a5430;
+}
+
+/* Antécédents du patient */
+.antecedents-panel .panel-header {
+  align-items: center;
+}
+
+.antecedents-dossier-link {
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+
+.antecedents-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.antecedents-item {
+  padding: 10px var(--space-md);
+  border-radius: 8px;
+  transition: background 0.12s;
+}
+
+.antecedents-item:hover {
+  background: #f5f8fb;
+}
+
+.antecedents-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.antecedents-ref {
+  font-weight: 700;
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: var(--primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.antecedents-ref:hover {
+  text-decoration: underline;
+}
+
+.antecedents-nature {
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.antecedents-date {
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.antecedents-conclusion {
+  margin: 5px 0 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.45;
+  padding-left: 2px;
+}
+
+/* Patient detail: prélèvements table */
+.patient-detail-exams-table {
+  width: 100%;
+}
+
+.patient-detail-exam-row td {
+  vertical-align: top;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.patient-detail-exam-ref {
+  font-weight: 700;
+  font-family: monospace;
+  color: var(--primary);
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.patient-detail-conclusion-cell {
+  max-width: 340px;
+}
+
+.patient-detail-conclusion {
+  font-size: 0.87rem;
+  color: var(--text);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.patient-detail-no-conclusion {
+  color: var(--muted);
+}
+
+.text-muted {
+  color: var(--muted);
+}
+
+/* Patient list: main row */
+.patient-main-row td {
+  vertical-align: middle;
+}
+
+.patient-name-cell {
+  font-weight: 600;
+}
+
+.patient-actions-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.patient-add-exam-btn {
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  min-height: 32px;
+  background: var(--primary);
+}
+
+.patient-add-exam-btn:hover {
+  background: var(--primary-strong);
+}
+
+.patient-view-btn {
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  min-height: 32px;
+}
+
+.patient-expand-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 7px;
+  cursor: pointer;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.patient-expand-btn:hover {
+  background: #edf4f7;
+  color: var(--primary);
+}
+
+/* Patient list: expanded prélèvements sub-row */
+.patient-exams-row td {
+  padding: 0;
+  background: #f7fbfc;
+  border-top: none;
+}
+
+.patient-exams-cell {
+  padding: 10px 20px 14px 20px !important;
+  border-bottom: 2px solid var(--border);
+}
+
+.patient-exams-loading,
+.patient-exams-error {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+.patient-exams-error {
+  color: var(--danger-text);
+}
+
+.patient-exams-empty {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.patient-exams-inline {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.patient-exams-inline-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.patient-exams-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.patient-exams-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 0.85rem;
+}
+
+.patient-exams-ref {
+  font-weight: 700;
+  color: var(--primary);
+  font-family: monospace;
+  font-size: 0.88rem;
+  text-decoration: none;
+}
+
+.patient-exams-ref:hover {
+  text-decoration: underline;
+}
+
+.patient-exams-nature {
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.patient-exams-date {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.patient-exams-more {
+  font-size: 0.85rem;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;

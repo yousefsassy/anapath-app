@@ -53,6 +53,9 @@ export interface Exam {
   report?: Report
   created_at: string
   updated_at: string
+  // Joined fields from exam list endpoint
+  patient_first_name?: string
+  patient_last_name?: string
 }
 
 export interface NewPatientInput {
@@ -80,3 +83,12 @@ export interface NewExamInput {
 }
 
 export type ReportInput = Report
+
+export interface ReportSummary {
+  conclusion: string
+  updated_at: string
+}
+
+export interface ExamWithReportSummary extends Exam {
+  report_summary: ReportSummary | null
+}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { FormField } from '../components/FormField'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
@@ -8,15 +8,39 @@ import { PageContainer } from '../layouts/PageContainer'
 import { examService } from '../services/examService'
 import type { UpdateExamInput } from '../services/examService'
 import { patientService } from '../services/patientService'
-import type { Exam, ReportInput } from '../types/domain'
+import type { Exam, ExamWithReportSummary, ReportInput } from '../types/domain'
 import { mapExamStatusToBackend } from '../utils/domainMappings'
+import { formatDate, truncate } from '../utils/formatting'
 
-function formatDiagnosisKeywords(value: Exam['diagnosis_keywords']) {
-  if (Array.isArray(value)) {
-    return value.length > 0 ? value.join(', ') : 'Not provided'
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function toDateInputValue(value: string | null | undefined): string {
+  return value ? value.slice(0, 10) : ''
+}
+
+function toDiagnosisKeywordsString(value: Exam['diagnosis_keywords']): string {
+  if (Array.isArray(value)) return value.join(', ')
+  return value ?? ''
+}
+
+function formatDiagnosisKeywords(value: Exam['diagnosis_keywords']): string {
+  if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '—'
+  return value || '—'
+}
+
+function toExamEditForm(exam: Exam): UpdateExamInput {
+  return {
+    exam_type: exam.exam_type,
+    clinic_name: exam.clinic_name ?? '',
+    requesting_doctor: exam.requesting_doctor ?? '',
+    requested_date: toDateInputValue(exam.requested_date),
+    registered_date: toDateInputValue(exam.registered_date),
+    result_issued_date: toDateInputValue(exam.result_issued_date),
+    sample_nature: exam.sample_nature ?? '',
+    exam_history: exam.exam_history ?? '',
+    diagnosis_keywords: toDiagnosisKeywordsString(exam.diagnosis_keywords),
+    status: mapExamStatusToBackend(exam.status),
   }
-
-  return value || 'Not provided'
 }
 
 const emptyReport: ReportInput = {
@@ -39,36 +63,14 @@ const emptyExamForm: UpdateExamInput = {
   status: 'registered',
 }
 
-function toDateInputValue(value: string | null | undefined): string {
-  if (!value) {
-    return ''
-  }
+// ── status action config ──────────────────────────────────────────────────────
 
-  return value.slice(0, 10)
+const STATUS_NEXT: Record<string, { label: string; next: 'in_progress' | 'completed' }> = {
+  registered: { label: 'Mettre en cours', next: 'in_progress' },
+  in_progress: { label: 'Valider', next: 'completed' },
 }
 
-function toDiagnosisKeywordsString(value: Exam['diagnosis_keywords']): string {
-  if (Array.isArray(value)) {
-    return value.join(', ')
-  }
-
-  return value ?? ''
-}
-
-function toExamEditForm(exam: Exam): UpdateExamInput {
-  return {
-    exam_type: exam.exam_type,
-    clinic_name: exam.clinic_name ?? '',
-    requesting_doctor: exam.requesting_doctor ?? '',
-    requested_date: toDateInputValue(exam.requested_date),
-    registered_date: toDateInputValue(exam.registered_date),
-    result_issued_date: toDateInputValue(exam.result_issued_date),
-    sample_nature: exam.sample_nature ?? '',
-    exam_history: exam.exam_history ?? '',
-    diagnosis_keywords: toDiagnosisKeywordsString(exam.diagnosis_keywords),
-    status: mapExamStatusToBackend(exam.status),
-  }
-}
+// ── component ─────────────────────────────────────────────────────────────────
 
 export function ExamDetailPage() {
   const { id = '' } = useParams()
@@ -77,45 +79,99 @@ export function ExamDetailPage() {
   const [report, setReport] = useState<ReportInput>(emptyReport)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+
   const [isReportLoading, setIsReportLoading] = useState(true)
   const [reportError, setReportError] = useState('')
   const [reportInfo, setReportInfo] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [patientName, setPatientName] = useState('Patient')
+
+  const [patientName, setPatientName] = useState('')
+  const [antecedents, setAntecedents] = useState<ExamWithReportSummary[]>([])
+
   const [isEditingExam, setIsEditingExam] = useState(false)
   const [isExamSubmitting, setIsExamSubmitting] = useState(false)
   const [examForm, setExamForm] = useState<UpdateExamInput>(emptyExamForm)
   const [examUpdateError, setExamUpdateError] = useState('')
   const [examUpdateInfo, setExamUpdateInfo] = useState('')
 
+  const [isStatusUpdating, setIsStatusUpdating] = useState(false)
+  const [statusError, setStatusError] = useState('')
+
+  // Load exam + report --------------------------------------------------------
   useEffect(() => {
-    const loadExam = async () => {
+    const load = async () => {
       setIsLoading(true)
       setError('')
-
       try {
         const data = await examService.getById(id)
         setExam(data)
-        if (data) {
-          setExamForm(toExamEditForm(data))
-        }
+        if (data) setExamForm(toExamEditForm(data))
         setReport(data?.report ?? emptyReport)
-      } catch (loadError) {
-        const message = loadError instanceof Error ? loadError.message : 'Unable to load exam.'
-        setError(message)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Impossible de charger le prélèvement.')
       } finally {
         setIsLoading(false)
       }
     }
-
-    void loadExam()
+    void load()
   }, [id])
 
-  const onEditExam = () => {
+  // Load report separately ---------------------------------------------------
+  useEffect(() => {
     if (!exam) {
+      setReport(emptyReport)
+      setIsReportLoading(false)
       return
     }
+    const loadReport = async () => {
+      setIsReportLoading(true)
+      setReportError('')
+      setReportInfo('')
+      try {
+        const data = await examService.getReportByExamId(id)
+        if (!data) {
+          setReport(emptyReport)
+          return
+        }
+        setReport(data)
+      } catch (err) {
+        setReportError(
+          err instanceof Error ? err.message : 'Impossible de charger le compte rendu.'
+        )
+      } finally {
+        setIsReportLoading(false)
+      }
+    }
+    void loadReport()
+  }, [id, exam])
 
+  // Load patient name + antecedents ------------------------------------------
+  useEffect(() => {
+    if (!exam?.patient_id) return
+    const loadPatientContext = async () => {
+      try {
+        const patient = await patientService.getById(exam.patient_id)
+        if (patient) {
+          setPatientName(`${patient.last_name} ${patient.first_name}`)
+        }
+      } catch {
+        // breadcrumb fallback — non-critical
+      }
+
+      try {
+        const allExams = await patientService.getExamsWithReportSummary(exam.patient_id)
+        // Exclude current exam, already sorted DESC by backend
+        setAntecedents(allExams.filter((e) => String(e.id) !== String(id)))
+      } catch {
+        // antecedents are non-critical — fail silently
+      }
+    }
+    void loadPatientContext()
+  }, [exam?.patient_id, id])
+
+  // Edit exam ----------------------------------------------------------------
+  const onEditExam = () => {
+    if (!exam) return
     setExamUpdateError('')
     setExamUpdateInfo('')
     setExamForm(toExamEditForm(exam))
@@ -123,9 +179,7 @@ export function ExamDetailPage() {
   }
 
   const onCancelEditExam = () => {
-    if (exam) {
-      setExamForm(toExamEditForm(exam))
-    }
+    if (exam) setExamForm(toExamEditForm(exam))
     setExamUpdateError('')
     setExamUpdateInfo('')
     setIsEditingExam(false)
@@ -133,129 +187,78 @@ export function ExamDetailPage() {
 
   const onSubmitExamUpdate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-
-    if (isExamSubmitting) {
-      return
-    }
-
+    if (isExamSubmitting) return
     setExamUpdateError('')
     setExamUpdateInfo('')
     setIsExamSubmitting(true)
-
     try {
       const updatedExam = await examService.update(id, examForm)
-
       if (!updatedExam) {
-        setExamUpdateError('Exam not found for update.')
+        setExamUpdateError('Prélèvement introuvable pour la mise à jour.')
         return
       }
-
       setExam(updatedExam)
       setExamForm(toExamEditForm(updatedExam))
       setIsEditingExam(false)
-      setExamUpdateInfo('Exam metadata updated successfully.')
-    } catch (updateError) {
-      const message = updateError instanceof Error ? updateError.message : 'Unable to update exam.'
-      setExamUpdateError(message)
+      setExamUpdateInfo('Prélèvement mis à jour.')
+    } catch (err) {
+      setExamUpdateError(
+        err instanceof Error ? err.message : 'Impossible de mettre à jour le prélèvement.'
+      )
     } finally {
       setIsExamSubmitting(false)
     }
   }
 
-  useEffect(() => {
-    const loadPatientName = async () => {
-      if (!exam?.patient_id) {
-        setPatientName('Patient')
-        return
+  // Status action ------------------------------------------------------------
+  const onUpdateStatus = async (next: 'in_progress' | 'completed') => {
+    if (isStatusUpdating || !exam) return
+    setStatusError('')
+    setIsStatusUpdating(true)
+    try {
+      const updated = await examService.updateStatus(id, next)
+      if (updated) {
+        setExam(updated)
+        setExamForm(toExamEditForm(updated))
       }
-
-      try {
-        const patient = await patientService.getById(exam.patient_id)
-        if (!patient) {
-          setPatientName('Patient')
-          return
-        }
-
-        setPatientName(`${patient.first_name} ${patient.last_name}`)
-      } catch {
-        setPatientName('Patient')
-      }
+    } catch (err) {
+      setStatusError(
+        err instanceof Error ? err.message : 'Impossible de mettre à jour le statut.'
+      )
+    } finally {
+      setIsStatusUpdating(false)
     }
+  }
 
-    void loadPatientName()
-  }, [exam?.patient_id])
-
-  useEffect(() => {
-    const loadReport = async () => {
-      setIsReportLoading(true)
-      setReportError('')
-      setReportInfo('')
-
-      try {
-        const data = await examService.getReportByExamId(id)
-
-        if (!data) {
-          setReport(emptyReport)
-          setReportInfo('No report found yet. You can create one below.')
-          return
-        }
-
-        const isEmpty =
-          !data.clinical_info.trim() &&
-          !data.macroscopy.trim() &&
-          !data.microscopy.trim() &&
-          !data.conclusion.trim()
-
-        setReport(data)
-        if (isEmpty) {
-          setReportInfo('Report is empty. You can start writing now.')
-        }
-      } catch (loadError) {
-        const message = loadError instanceof Error ? loadError.message : 'Unable to load report.'
-        setReportError(message)
-      } finally {
-        setIsReportLoading(false)
-      }
-    }
-
-    if (!exam) {
-      setReport(emptyReport)
-      setIsReportLoading(false)
-      return
-    }
-
-    void loadReport()
-  }, [id, exam])
-
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  // Save report --------------------------------------------------------------
+  const onSubmitReport = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setReportError('')
     setReportInfo('')
     setIsSubmitting(true)
-
     try {
-      const updatedReport = await examService.saveReportByExamId(id, report)
-
-      if (!updatedReport) {
-        setReportError('Report not found for this exam.')
+      const updated = await examService.saveReportByExamId(id, report)
+      if (!updated) {
+        setReportError('Compte rendu introuvable pour ce prélèvement.')
         return
       }
-
-      setReport(updatedReport)
-      setReportInfo('Report saved successfully.')
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : 'Unable to save report.'
-      setReportError(message)
+      setReport(updated)
+      setReportInfo('Compte rendu enregistré.')
+    } catch (err) {
+      setReportError(
+        err instanceof Error ? err.message : "Impossible d'enregistrer le compte rendu."
+      )
     } finally {
       setIsSubmitting(false)
     }
   }
 
+  // Loading / error states ---------------------------------------------------
   if (isLoading) {
     return (
       <PageContainer maxWidth="wide">
         <section className="panel">
-          <h2>Loading exam...</h2>
+          <p className="report-loading">Chargement du prélèvement…</p>
         </section>
       </PageContainer>
     )
@@ -275,35 +278,60 @@ export function ExamDetailPage() {
     return (
       <PageContainer maxWidth="wide">
         <section className="panel">
-          <h2>Exam not found</h2>
-          <p>This exam does not exist.</p>
+          <h2>Prélèvement introuvable</h2>
+          <p>Ce prélèvement n'existe pas ou a été supprimé.</p>
         </section>
       </PageContainer>
     )
   }
 
+  const statusAction = STATUS_NEXT[exam.status]
+  const currentStatus = mapExamStatusToBackend(exam.status)
+
   return (
     <PageContainer maxWidth="wide">
       <PageHeader
-        title={`Exam ${exam.exam_number}`}
-        subtitle={`${exam.exam_type} - ${exam.clinic_name}`}
+        title={`Prélèvement ${exam.exam_number}`}
+        subtitle={[exam.sample_nature, exam.clinic_name].filter(Boolean).join(' — ') || 'Détail du prélèvement'}
         breadcrumbs={[
-          { label: 'Dashboard', to: '/dashboard' },
+          { label: 'Accueil', to: '/dashboard' },
           { label: 'Patients', to: '/patients' },
-          { label: patientName, to: `/patients/${exam.patient_id}` },
-          { label: `Exam ${exam.exam_number}` },
+          ...(patientName ? [{ label: patientName, to: `/patients/${exam.patient_id}` }] : []),
+          { label: exam.exam_number },
         ]}
       />
 
+      {/* ── Exam summary ──────────────────────────────────────────────────── */}
       <section className="panel exam-detail-summary-panel">
         <form onSubmit={onSubmitExamUpdate}>
           <div className="panel-header exam-detail-summary-header">
             <div>
-              <h2>Exam Summary</h2>
-              <p>Core metadata to support report drafting and clinical traceability.</p>
+              <h2>Informations du prélèvement</h2>
             </div>
-            <div className="form-actions">
-              {isEditingExam ? (
+            <div className="form-actions exam-detail-status-actions">
+              <StatusBadge status={exam.status} />
+
+              {!isEditingExam && statusAction ? (
+                <button
+                  type="button"
+                  className={`button exam-status-btn exam-status-btn--${statusAction.next}`}
+                  onClick={() => void onUpdateStatus(statusAction.next)}
+                  disabled={isStatusUpdating}
+                >
+                  {isStatusUpdating ? '…' : statusAction.label}
+                </button>
+              ) : null}
+
+              {!isEditingExam ? (
+                <button
+                  type="button"
+                  className="button tertiary"
+                  onClick={onEditExam}
+                  disabled={isExamSubmitting}
+                >
+                  Modifier
+                </button>
+              ) : (
                 <>
                   <button
                     type="button"
@@ -311,155 +339,113 @@ export function ExamDetailPage() {
                     onClick={onCancelEditExam}
                     disabled={isExamSubmitting}
                   >
-                    Cancel
+                    Annuler
                   </button>
                   <button type="submit" className="button" disabled={isExamSubmitting}>
-                    {isExamSubmitting ? 'Saving...' : 'Save Exam'}
+                    {isExamSubmitting ? 'Enregistrement…' : 'Enregistrer'}
                   </button>
                 </>
-              ) : (
-                <button
-                  type="button"
-                  className="button tertiary"
-                  onClick={onEditExam}
-                  disabled={isLoading || isExamSubmitting}
-                >
-                  Edit Exam
-                </button>
               )}
-              <StatusBadge status={exam.status} />
             </div>
           </div>
 
+          {statusError ? <p className="error-message">{statusError}</p> : null}
           {examUpdateError ? <p className="error-message">{examUpdateError}</p> : null}
-          {isExamSubmitting ? <p className="report-loading">Saving exam...</p> : null}
           {examUpdateInfo ? <p className="success-message">{examUpdateInfo}</p> : null}
 
           {isEditingExam ? (
             <section className="form-section">
               <div className="form-grid">
-                <FormField label="Exam Type" htmlFor="exam_type">
+                <FormField label="Type d'examen" htmlFor="exam_type">
                   <select
                     id="exam_type"
                     value={examForm.exam_type}
-                    onChange={(event) => setExamForm({ ...examForm, exam_type: event.target.value })}
+                    onChange={(e) => setExamForm({ ...examForm, exam_type: e.target.value })}
                     disabled={isExamSubmitting}
                   >
-                    <option value="histology">Histology</option>
-                    <option value="cytology">Cytology</option>
+                    <option value="histology">Histologie</option>
+                    <option value="cytology">Cytologie</option>
                   </select>
                 </FormField>
 
-                <FormField label="Status" htmlFor="exam_status">
-                  <select
-                    id="exam_status"
-                    value={examForm.status}
-                    onChange={(event) =>
-                      setExamForm({
-                        ...examForm,
-                        status: event.target.value as UpdateExamInput['status'],
-                      })
-                    }
-                    disabled={isExamSubmitting}
-                  >
-                    <option value="registered">Registered</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                </FormField>
-
-                <FormField label="Requesting Doctor" htmlFor="requesting_doctor">
+                <FormField label="Médecin prescripteur" htmlFor="requesting_doctor">
                   <input
                     id="requesting_doctor"
                     value={examForm.requesting_doctor}
-                    onChange={(event) =>
-                      setExamForm({ ...examForm, requesting_doctor: event.target.value })
-                    }
+                    onChange={(e) => setExamForm({ ...examForm, requesting_doctor: e.target.value })}
                     disabled={isExamSubmitting}
                   />
                 </FormField>
 
-                <FormField label="Clinic" htmlFor="clinic_name">
+                <FormField label="Clinique / Établissement" htmlFor="clinic_name">
                   <input
                     id="clinic_name"
                     value={examForm.clinic_name}
-                    onChange={(event) => setExamForm({ ...examForm, clinic_name: event.target.value })}
+                    onChange={(e) => setExamForm({ ...examForm, clinic_name: e.target.value })}
                     disabled={isExamSubmitting}
                   />
                 </FormField>
 
-                <FormField label="Requested Date" htmlFor="requested_date">
-                  <input
-                    id="requested_date"
-                    type="date"
-                    value={examForm.requested_date}
-                    onChange={(event) =>
-                      setExamForm({ ...examForm, requested_date: event.target.value })
-                    }
-                    disabled={isExamSubmitting}
-                  />
-                </FormField>
-
-                <FormField label="Registered Date" htmlFor="registered_date">
+                <FormField label="Date de réception" htmlFor="registered_date">
                   <input
                     id="registered_date"
                     type="date"
                     value={examForm.registered_date}
-                    onChange={(event) =>
-                      setExamForm({ ...examForm, registered_date: event.target.value })
-                    }
+                    onChange={(e) => setExamForm({ ...examForm, registered_date: e.target.value })}
                     disabled={isExamSubmitting}
                   />
                 </FormField>
 
-                <FormField label="Result Issued Date" htmlFor="result_issued_date">
+                <FormField label="Date de demande" htmlFor="requested_date">
+                  <input
+                    id="requested_date"
+                    type="date"
+                    value={examForm.requested_date}
+                    onChange={(e) => setExamForm({ ...examForm, requested_date: e.target.value })}
+                    disabled={isExamSubmitting}
+                  />
+                </FormField>
+
+                <FormField label="Date de rendu" htmlFor="result_issued_date">
                   <input
                     id="result_issued_date"
                     type="date"
                     value={examForm.result_issued_date}
-                    onChange={(event) =>
-                      setExamForm({ ...examForm, result_issued_date: event.target.value })
-                    }
+                    onChange={(e) => setExamForm({ ...examForm, result_issued_date: e.target.value })}
                     disabled={isExamSubmitting}
                   />
                 </FormField>
 
-                <FormField label="Sample Nature" htmlFor="sample_nature">
+                <FormField label="Nature du prélèvement" htmlFor="sample_nature">
                   <textarea
                     id="sample_nature"
-                    rows={3}
+                    rows={2}
                     value={examForm.sample_nature}
-                    onChange={(event) =>
-                      setExamForm({ ...examForm, sample_nature: event.target.value })
-                    }
+                    onChange={(e) => setExamForm({ ...examForm, sample_nature: e.target.value })}
                     disabled={isExamSubmitting}
                   />
                 </FormField>
 
-                <FormField label="Exam History" htmlFor="exam_history">
+                <FormField label="Renseignement clinique" htmlFor="exam_history">
                   <textarea
                     id="exam_history"
                     rows={3}
                     value={examForm.exam_history}
-                    onChange={(event) =>
-                      setExamForm({ ...examForm, exam_history: event.target.value })
-                    }
+                    onChange={(e) => setExamForm({ ...examForm, exam_history: e.target.value })}
                     disabled={isExamSubmitting}
                   />
                 </FormField>
 
                 <FormField
-                  label="Diagnosis Keywords"
+                  label="Mots-clés diagnostiques"
                   htmlFor="diagnosis_keywords"
-                  helperText="Separate multiple keywords with commas."
+                  helperText="Séparer par des virgules."
                 >
                   <textarea
                     id="diagnosis_keywords"
-                    rows={3}
+                    rows={2}
                     value={examForm.diagnosis_keywords}
-                    onChange={(event) =>
-                      setExamForm({ ...examForm, diagnosis_keywords: event.target.value })
-                    }
+                    onChange={(e) => setExamForm({ ...examForm, diagnosis_keywords: e.target.value })}
                     disabled={isExamSubmitting}
                   />
                 </FormField>
@@ -468,47 +454,39 @@ export function ExamDetailPage() {
           ) : (
             <dl className="exam-detail-meta-grid">
               <div className="exam-detail-meta-item">
-                <dt>Exam Type</dt>
-                <dd>{exam.exam_type || 'Not provided'}</dd>
+                <dt>Type d'examen</dt>
+                <dd>{exam.exam_type === 'histology' ? 'Histologie' : exam.exam_type === 'cytology' ? 'Cytologie' : exam.exam_type || '—'}</dd>
               </div>
-
               <div className="exam-detail-meta-item">
-                <dt>Requesting Doctor</dt>
-                <dd>{exam.requesting_doctor || 'Not provided'}</dd>
+                <dt>Médecin prescripteur</dt>
+                <dd>{exam.requesting_doctor || '—'}</dd>
               </div>
-
               <div className="exam-detail-meta-item">
-                <dt>Clinic</dt>
-                <dd>{exam.clinic_name || 'Not provided'}</dd>
+                <dt>Clinique / Établissement</dt>
+                <dd>{exam.clinic_name || '—'}</dd>
               </div>
-
               <div className="exam-detail-meta-item">
-                <dt>Requested Date</dt>
-                <dd>{exam.requested_date || 'Not provided'}</dd>
+                <dt>Date de réception</dt>
+                <dd>{formatDate(exam.registered_date)}</dd>
               </div>
-
               <div className="exam-detail-meta-item">
-                <dt>Registered Date</dt>
-                <dd>{exam.registered_date || 'Not provided'}</dd>
+                <dt>Date de demande</dt>
+                <dd>{formatDate(exam.requested_date)}</dd>
               </div>
-
               <div className="exam-detail-meta-item">
-                <dt>Result Issued Date</dt>
-                <dd>{exam.result_issued_date || 'Not provided'}</dd>
+                <dt>Date de rendu</dt>
+                <dd>{formatDate(exam.result_issued_date)}</dd>
               </div>
-
               <div className="exam-detail-meta-item exam-detail-meta-item--full">
-                <dt>Sample Nature</dt>
-                <dd>{exam.sample_nature || 'Not provided'}</dd>
+                <dt>Nature du prélèvement</dt>
+                <dd>{exam.sample_nature || '—'}</dd>
               </div>
-
               <div className="exam-detail-meta-item exam-detail-meta-item--full">
-                <dt>Exam History</dt>
-                <dd>{exam.exam_history || 'Not provided'}</dd>
+                <dt>Renseignement clinique</dt>
+                <dd>{exam.exam_history || '—'}</dd>
               </div>
-
               <div className="exam-detail-meta-item exam-detail-meta-item--full">
-                <dt>Diagnosis Keywords</dt>
+                <dt>Mots-clés diagnostiques</dt>
                 <dd>{formatDiagnosisKeywords(exam.diagnosis_keywords)}</dd>
               </div>
             </dl>
@@ -516,77 +494,96 @@ export function ExamDetailPage() {
         </form>
       </section>
 
-      <section className="panel exam-detail-report-panel">
-        <div className="panel-header exam-detail-report-header">
+      {/* ── Antécédents du patient ────────────────────────────────────────── */}
+      {antecedents.length > 0 && (
+        <section className="panel antecedents-panel">
+          <div className="panel-header">
+            <h2>Antécédents du patient</h2>
+            <Link to={`/patients/${exam.patient_id}`} className="text-link antecedents-dossier-link">
+              Voir dossier complet →
+            </Link>
+          </div>
+          <ul className="antecedents-list">
+            {antecedents.map((prev) => {
+              const preview = truncate(prev.report_summary?.conclusion ?? '', 130)
+              return (
+                <li key={prev.id} className="antecedents-item">
+                  <div className="antecedents-item-meta">
+                    <Link to={`/exams/${prev.id}`} className="antecedents-ref">
+                      {prev.exam_number}
+                    </Link>
+                    <span className="antecedents-nature">{prev.sample_nature || '—'}</span>
+                    <span className="antecedents-date">{formatDate(prev.registered_date)}</span>
+                    <StatusBadge status={prev.status} />
+                  </div>
+                  {preview && (
+                    <p className="antecedents-conclusion">{preview}</p>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
+
+      {/* ── Compte Rendu ─────────────────────────────────────────────────── */}
+      <section className="panel exam-detail-report-editor-panel">
+        <div className="panel-header">
           <div>
-            <h2>Report Workspace</h2>
-            <p>Complete and maintain the clinical report for this examination.</p>
+            <h2>Compte Rendu</h2>
+            <p>
+              {currentStatus === 'completed'
+                ? 'Ce prélèvement est validé.'
+                : 'Rédigez le compte rendu structuré pour ce prélèvement.'}
+            </p>
           </div>
         </div>
 
-        <div className="exam-detail-report-intro">
-          <p>
-            Keep the narrative concise and clinically structured: context, gross findings,
-            microscopic interpretation, then conclusion.
-          </p>
-        </div>
-      </section>
+        <form className="form-layout report-form-layout" onSubmit={onSubmitReport}>
+          <div className="form-grid">
+            <FormField label="Renseignement clinique" htmlFor="clinical_info">
+              <textarea
+                id="clinical_info"
+                rows={4}
+                value={report.clinical_info}
+                disabled={isReportLoading || isSubmitting}
+                onChange={(e) => setReport({ ...report, clinical_info: e.target.value })}
+              />
+            </FormField>
 
-      <section className="panel exam-detail-report-editor-panel">
-        <form className="form-layout report-form-layout" onSubmit={onSubmit}>
-          <section className="form-section">
-            <div className="form-section-header">
-              <h3>Clinical Narrative</h3>
-              <p>Document findings in a clear sequence from context to conclusion.</p>
-            </div>
+            <FormField label="Macroscopie" htmlFor="macroscopy">
+              <textarea
+                id="macroscopy"
+                rows={4}
+                value={report.macroscopy}
+                disabled={isReportLoading || isSubmitting}
+                onChange={(e) => setReport({ ...report, macroscopy: e.target.value })}
+              />
+            </FormField>
 
-            <div className="form-grid">
-              <FormField label="Clinical Info" htmlFor="clinical_info">
-                <textarea
-                  id="clinical_info"
-                  rows={4}
-                  value={report.clinical_info}
-                  disabled={isReportLoading || isSubmitting}
-                  onChange={(event) =>
-                    setReport({ ...report, clinical_info: event.target.value })
-                  }
-                />
-              </FormField>
+            <FormField label="Microscopie" htmlFor="microscopy">
+              <textarea
+                id="microscopy"
+                rows={5}
+                value={report.microscopy}
+                disabled={isReportLoading || isSubmitting}
+                onChange={(e) => setReport({ ...report, microscopy: e.target.value })}
+              />
+            </FormField>
 
-              <FormField label="Macroscopy" htmlFor="macroscopy">
-                <textarea
-                  id="macroscopy"
-                  rows={4}
-                  value={report.macroscopy}
-                  disabled={isReportLoading || isSubmitting}
-                  onChange={(event) => setReport({ ...report, macroscopy: event.target.value })}
-                />
-              </FormField>
-
-              <FormField label="Microscopy" htmlFor="microscopy">
-                <textarea
-                  id="microscopy"
-                  rows={5}
-                  value={report.microscopy}
-                  disabled={isReportLoading || isSubmitting}
-                  onChange={(event) => setReport({ ...report, microscopy: event.target.value })}
-                />
-              </FormField>
-
-              <FormField label="Conclusion" htmlFor="conclusion">
-                <textarea
-                  id="conclusion"
-                  rows={4}
-                  value={report.conclusion}
-                  disabled={isReportLoading || isSubmitting}
-                  onChange={(event) => setReport({ ...report, conclusion: event.target.value })}
-                />
-              </FormField>
-            </div>
-          </section>
+            <FormField label="Conclusion" htmlFor="conclusion">
+              <textarea
+                id="conclusion"
+                rows={4}
+                value={report.conclusion}
+                disabled={isReportLoading || isSubmitting}
+                onChange={(e) => setReport({ ...report, conclusion: e.target.value })}
+              />
+            </FormField>
+          </div>
 
           <div className="exam-detail-feedback" aria-live="polite">
-            {isReportLoading ? <p className="report-loading">Loading report...</p> : null}
+            {isReportLoading ? <p className="report-loading">Chargement du compte rendu…</p> : null}
             {reportError ? <p className="error-message">{reportError}</p> : null}
             {reportInfo ? <p className="success-message">{reportInfo}</p> : null}
           </div>
@@ -597,7 +594,7 @@ export function ExamDetailPage() {
               className="button"
               disabled={isReportLoading || isSubmitting}
             >
-              {isSubmitting ? 'Saving...' : 'Save Report'}
+              {isSubmitting ? 'Enregistrement…' : 'Enregistrer le compte rendu'}
             </button>
           </div>
         </form>

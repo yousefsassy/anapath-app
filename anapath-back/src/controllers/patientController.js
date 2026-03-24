@@ -3,6 +3,7 @@ import {
   findPatientById,
   insertPatient,
   findExamsByPatientId,
+  findExamsByPatientIdWithReportSummary,
   updatePatientById,
 } from '../db/queries.js';
 
@@ -86,7 +87,10 @@ export async function getPatientExams(req, res, next) {
       return res.status(404).json({ success: false, message: 'Patient not found' });
     }
 
-    const patientExams = await findExamsByPatientId(patientId);
+    const includeReportSummary = req.query.include === 'report_summary';
+    const patientExams = includeReportSummary
+      ? await findExamsByPatientIdWithReportSummary(patientId)
+      : await findExamsByPatientId(patientId);
 
     return res.status(200).json({
       success: true,

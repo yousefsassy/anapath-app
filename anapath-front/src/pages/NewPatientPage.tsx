@@ -28,23 +28,25 @@ export function NewPatientPage() {
     setError('')
 
     if (!form.first_name.trim() || !form.last_name.trim()) {
-      setError('First name and last name are required.')
+      setError('Le prénom et le nom sont obligatoires.')
       return
     }
 
     if (form.age <= 0) {
-      setError('Age must be greater than 0.')
+      setError("L'âge doit être supérieur à 0.")
       return
     }
 
     setIsSubmitting(true)
 
     try {
-      await patientService.create(form)
-      navigate('/patients')
+      const created = await patientService.create(form)
+      navigate(`/patients/${created.id}`)
     } catch (submissionError) {
       const message =
-        submissionError instanceof Error ? submissionError.message : 'Unable to create patient.'
+        submissionError instanceof Error
+          ? submissionError.message
+          : 'Impossible de créer le patient.'
       setError(message)
     } finally {
       setIsSubmitting(false)
@@ -54,74 +56,75 @@ export function NewPatientPage() {
   return (
     <PageContainer maxWidth="default">
       <PageHeader
-        title="New Patient"
-        subtitle="Create a complete patient profile before registering pathology exams."
+        title="Nouveau patient"
+        subtitle="Créez le dossier patient avant d'enregistrer un prélèvement."
+        breadcrumbs={[
+          { label: 'Accueil', to: '/dashboard' },
+          { label: 'Patients', to: '/patients' },
+          { label: 'Nouveau patient' },
+        ]}
       />
 
       <section className="panel form-panel">
         <div className="form-panel-intro">
-          <h2>Patient Registration</h2>
-          <p>Capture core identity details and relevant medical context.</p>
+          <h2>Enregistrement du patient</h2>
+          <p>Renseignez l'identité et le contexte médical du patient.</p>
         </div>
 
         <form onSubmit={onSubmit} className="form-layout">
           <section className="form-section">
             <div className="form-section-header">
-              <h3>Identity</h3>
-              <p>Required demographic details used across the clinical workflow.</p>
+              <h3>Identité</h3>
+              <p>Informations démographiques obligatoires.</p>
             </div>
 
             <div className="form-grid">
-              <FormField label="First Name" htmlFor="first_name">
+              <FormField label="Prénom" htmlFor="first_name">
                 <input
                   id="first_name"
                   value={form.first_name}
-                  onChange={(event) => setForm({ ...form, first_name: event.target.value })}
+                  onChange={(e) => setForm({ ...form, first_name: e.target.value })}
                 />
               </FormField>
 
-              <FormField label="Last Name" htmlFor="last_name">
+              <FormField label="Nom" htmlFor="last_name">
                 <input
                   id="last_name"
                   value={form.last_name}
-                  onChange={(event) => setForm({ ...form, last_name: event.target.value })}
+                  onChange={(e) => setForm({ ...form, last_name: e.target.value })}
                 />
               </FormField>
 
-              <FormField label="Age" htmlFor="age">
+              <FormField label="Âge" htmlFor="age">
                 <input
                   id="age"
                   type="number"
                   min={1}
                   value={form.age || ''}
-                  onChange={(event) =>
-                    setForm({ ...form, age: Number(event.target.value) || 0 })
-                  }
+                  onChange={(e) => setForm({ ...form, age: Number(e.target.value) || 0 })}
                 />
               </FormField>
 
-              <FormField label="Sex" htmlFor="sex">
+              <FormField label="Sexe" htmlFor="sex">
                 <select
                   id="sex"
                   value={form.sex}
-                  onChange={(event) =>
-                    setForm({ ...form, sex: event.target.value as SexDisplay })
-                  }
+                  onChange={(e) => setForm({ ...form, sex: e.target.value as SexDisplay })}
                 >
-                  <option value="Female">Female</option>
-                  <option value="Male">Male</option>
+                  <option value="Female">Femme</option>
+                  <option value="Male">Homme</option>
                 </select>
               </FormField>
 
               <FormField
-                label="Phone"
+                label="Téléphone"
                 htmlFor="phone"
-                helperText="Optional but useful for follow-up communication."
+                helperText="Facultatif."
               >
                 <input
                   id="phone"
                   value={form.phone}
-                  onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 />
               </FormField>
             </div>
@@ -129,19 +132,17 @@ export function NewPatientPage() {
 
           <section className="form-section">
             <div className="form-section-header">
-              <h3>Clinical Context</h3>
-              <p>General medical history that may support exam interpretation.</p>
+              <h3>Contexte médical</h3>
+              <p>Antécédents généraux utiles à l'interprétation des prélèvements.</p>
             </div>
 
             <div className="form-grid">
-              <FormField label="General History" htmlFor="general_history">
+              <FormField label="Antécédents" htmlFor="general_history">
                 <textarea
                   id="general_history"
-                  value={form.general_history}
-                  onChange={(event) =>
-                    setForm({ ...form, general_history: event.target.value })
-                  }
                   rows={5}
+                  value={form.general_history}
+                  onChange={(e) => setForm({ ...form, general_history: e.target.value })}
                 />
               </FormField>
             </div>
@@ -151,10 +152,10 @@ export function NewPatientPage() {
 
           <div className="form-actions form-actions-sticky">
             <Link to="/patients" className="button tertiary">
-              Cancel
+              Annuler
             </Link>
             <button className="button" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : 'Create Patient'}
+              {isSubmitting ? 'Enregistrement…' : 'Enregistrer le patient'}
             </button>
           </div>
         </form>

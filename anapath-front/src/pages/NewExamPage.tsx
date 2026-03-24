@@ -34,27 +34,30 @@ export function NewExamPage() {
     setError('')
 
     if (!patientId) {
-      setError('Missing patient identifier.')
+      setError('Identifiant patient manquant.')
       return
     }
 
     if (!form.exam_type.trim()) {
-      setError('Exam type is required.')
+      setError("Le type d'examen est obligatoire.")
       return
     }
 
     setIsSubmitting(true)
 
     try {
-      await examService.create({
+      const created = await examService.create({
         ...form,
         patient_id: patientId,
       })
 
-      navigate(`/patients/${patientId}`)
+      // Land directly on the case workspace
+      navigate(`/exams/${created.id}`)
     } catch (submissionError) {
       const message =
-        submissionError instanceof Error ? submissionError.message : 'Unable to create exam.'
+        submissionError instanceof Error
+          ? submissionError.message
+          : "Impossible de créer le prélèvement."
       setError(message)
     } finally {
       setIsSubmitting(false)
@@ -64,144 +67,141 @@ export function NewExamPage() {
   return (
     <PageContainer maxWidth="default">
       <PageHeader
-        title="New Exam"
-        subtitle="Record exam metadata and sample context before report drafting."
+        title="Nouveau prélèvement"
+        subtitle="Enregistrez les informations du prélèvement avant la rédaction du compte rendu."
+        breadcrumbs={[
+          { label: 'Accueil', to: '/dashboard' },
+          { label: 'Patients', to: '/patients' },
+          ...(patientId ? [{ label: 'Dossier patient', to: `/patients/${patientId}` }] : []),
+          { label: 'Nouveau prélèvement' },
+        ]}
       />
 
       <section className="panel form-panel">
         <div className="form-panel-intro">
-          <h2>Exam Registration</h2>
-          <p>Define examination details and timeline information used in reporting.</p>
+          <h2>Enregistrement du prélèvement</h2>
+          <p>
+            Renseignez les informations essentielles du prélèvement. Le compte rendu sera rédigé
+            après enregistrement.
+          </p>
         </div>
 
         <form onSubmit={onSubmit} className="form-layout">
+
+          {/* ── Section 1: Identification ─────────────────────────────────── */}
           <section className="form-section">
             <div className="form-section-header">
-              <h3>Exam Details</h3>
-              <p>Core metadata to identify the exam and requesting source.</p>
+              <h3>Identification</h3>
+              <p>Type d'examen, nature et origine du prélèvement.</p>
             </div>
 
             <div className="form-grid">
-              <FormField label="Exam Type" htmlFor="exam_type">
+              <FormField label="Type d'examen" htmlFor="exam_type">
                 <select
                   id="exam_type"
                   value={form.exam_type}
-                  onChange={(event) => setForm({ ...form, exam_type: event.target.value })}
+                  onChange={(e) => setForm({ ...form, exam_type: e.target.value })}
                 >
-                  <option value="histology">Histology</option>
-                  <option value="cytology">Cytology</option>
+                  <option value="histology">Histologie (Biopsie / Pièce opératoire)</option>
+                  <option value="cytology">Cytologie</option>
                 </select>
               </FormField>
 
-              <FormField label="Clinic Name" htmlFor="clinic_name">
+              <FormField label="Nature du prélèvement" htmlFor="sample_nature">
                 <input
-                  id="clinic_name"
-                  value={form.clinic_name}
-                  onChange={(event) => setForm({ ...form, clinic_name: event.target.value })}
+                  id="sample_nature"
+                  placeholder="ex. Biopsie cutanée, Splénectomie…"
+                  value={form.sample_nature}
+                  onChange={(e) => setForm({ ...form, sample_nature: e.target.value })}
                 />
               </FormField>
 
-              <FormField label="Requesting Doctor" htmlFor="requesting_doctor">
+              <FormField label="Médecin prescripteur" htmlFor="requesting_doctor">
                 <input
                   id="requesting_doctor"
+                  placeholder="Nom du médecin demandeur"
                   value={form.requesting_doctor}
-                  onChange={(event) =>
-                    setForm({ ...form, requesting_doctor: event.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, requesting_doctor: e.target.value })}
+                />
+              </FormField>
+
+              <FormField label="Clinique / Établissement" htmlFor="clinic_name">
+                <input
+                  id="clinic_name"
+                  placeholder="Nom de la clinique ou de l'hôpital"
+                  value={form.clinic_name}
+                  onChange={(e) => setForm({ ...form, clinic_name: e.target.value })}
                 />
               </FormField>
             </div>
           </section>
 
+          {/* ── Section 2: Dates ──────────────────────────────────────────── */}
           <section className="form-section">
             <div className="form-section-header">
-              <h3>Timeline and Status</h3>
-              <p>Track operational status and key dates for the exam lifecycle.</p>
+              <h3>Dates</h3>
+              <p>Suivi chronologique du prélèvement.</p>
             </div>
 
             <div className="form-grid">
-              <FormField label="Requested Date" htmlFor="requested_date">
-                <input
-                  id="requested_date"
-                  type="date"
-                  value={form.requested_date}
-                  onChange={(event) => setForm({ ...form, requested_date: event.target.value })}
-                />
-              </FormField>
-
-              <FormField label="Registered Date" htmlFor="registered_date">
+              <FormField label="Date de réception" htmlFor="registered_date">
                 <input
                   id="registered_date"
                   type="date"
                   value={form.registered_date}
-                  onChange={(event) => setForm({ ...form, registered_date: event.target.value })}
+                  onChange={(e) => setForm({ ...form, registered_date: e.target.value })}
                 />
               </FormField>
 
-              <FormField label="Result Issued Date" htmlFor="result_issued_date">
+              <FormField label="Date de demande" htmlFor="requested_date">
+                <input
+                  id="requested_date"
+                  type="date"
+                  value={form.requested_date}
+                  onChange={(e) => setForm({ ...form, requested_date: e.target.value })}
+                />
+              </FormField>
+
+              <FormField label="Date de rendu prévue" htmlFor="result_issued_date">
                 <input
                   id="result_issued_date"
                   type="date"
                   value={form.result_issued_date}
-                  onChange={(event) =>
-                    setForm({ ...form, result_issued_date: event.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, result_issued_date: e.target.value })}
                 />
-              </FormField>
-
-              <FormField label="Status" htmlFor="status">
-                <select
-                  id="status"
-                  value={form.status}
-                  onChange={(event) =>
-                    setForm({ ...form, status: event.target.value as NewExamInput['status'] })
-                  }
-                >
-                  <option value="registered">Registered</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                </select>
               </FormField>
             </div>
           </section>
 
+          {/* ── Section 3: Contexte clinique ──────────────────────────────── */}
           <section className="form-section">
             <div className="form-section-header">
-              <h3>Sample and Clinical Notes</h3>
-              <p>Provide context that supports accurate interpretation by the pathologist.</p>
+              <h3>Contexte clinique</h3>
+              <p>Informations cliniques utiles à l'interprétation anatomopathologique.</p>
             </div>
 
             <div className="form-grid">
-              <FormField label="Sample Nature" htmlFor="sample_nature">
-                <textarea
-                  id="sample_nature"
-                  rows={3}
-                  value={form.sample_nature}
-                  onChange={(event) => setForm({ ...form, sample_nature: event.target.value })}
-                />
-              </FormField>
-
-              <FormField label="Exam History" htmlFor="exam_history">
+              <FormField label="Renseignement clinique" htmlFor="exam_history">
                 <textarea
                   id="exam_history"
-                  rows={3}
+                  rows={4}
+                  placeholder="Antécédents, motif de la demande, données cliniques pertinentes…"
                   value={form.exam_history}
-                  onChange={(event) => setForm({ ...form, exam_history: event.target.value })}
+                  onChange={(e) => setForm({ ...form, exam_history: e.target.value })}
                 />
               </FormField>
 
               <FormField
-                label="Diagnosis Keywords"
+                label="Mots-clés diagnostiques"
                 htmlFor="diagnosis_keywords"
-                helperText="Separate multiple keywords with commas."
+                helperText="Séparer par des virgules."
               >
                 <textarea
                   id="diagnosis_keywords"
-                  rows={3}
+                  rows={2}
+                  placeholder="ex. carcinome, lymphome, dysplasie…"
                   value={form.diagnosis_keywords}
-                  onChange={(event) =>
-                    setForm({ ...form, diagnosis_keywords: event.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, diagnosis_keywords: e.target.value })}
                 />
               </FormField>
             </div>
@@ -211,10 +211,10 @@ export function NewExamPage() {
 
           <div className="form-actions form-actions-sticky">
             <Link to={cancelTarget} className="button tertiary">
-              Cancel
+              Annuler
             </Link>
             <button type="submit" className="button" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : 'Create Exam'}
+              {isSubmitting ? 'Enregistrement…' : 'Enregistrer le prélèvement'}
             </button>
           </div>
         </form>

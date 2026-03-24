@@ -62,8 +62,19 @@ function toReportInput(value: Partial<ReportInput> | null | undefined): ReportIn
 }
 
 export const examService = {
-  list: async (): Promise<Exam[]> => {
-    return apiClient.get<Exam[]>('/exams')
+  list: async (status?: 'registered' | 'in_progress' | 'completed'): Promise<Exam[]> => {
+    const url = status ? `/exams?status=${status}` : '/exams'
+    return apiClient.get<Exam[]>(url)
+  },
+
+  updateStatus: async (id: number | string, status: 'registered' | 'in_progress' | 'completed'): Promise<Exam | null> => {
+    try {
+      return await apiClient.put<Exam>(`/exams/${id}`, { status })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (message.toLowerCase().includes('not found')) return null
+      throw error
+    }
   },
 
   listByPatientId: async (patientId: number | string): Promise<Exam[]> => {
