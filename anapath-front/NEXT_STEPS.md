@@ -1,32 +1,33 @@
-# Next Steps
+# V1 Status
 
-## Already Validated
-- login works against backend
-- patients list reads from DB
-- patient creation works
-- patient detail works
-- patient exams list works
-- exam creation works
-- exam detail works
-- report save/load works
+All core workflows are stable and integrated end-to-end.
 
-## Remaining Limitations
-- token auth is still placeholder-based
-- some legacy compatibility code remains intentionally
-- more type narrowing could be done later carefully
+## Completed
 
-## Next Tasks
-1. Run full regression check
-2. Narrow domain types carefully if desired
-3. Polish minor UX inconsistencies
-4. Remove remaining harmless legacy code if safe
+- Login against backend (PostgreSQL `users` table)
+- Patient list, create, detail, update
+- Duplicate patient detection on creation (warns + requires confirmation)
+- Exam (prélèvement) list, create, detail, update
+- Report (compte rendu) — 4 sections, auto-created on first save
+- Status transitions: Enregistré → En cours → Validé (via action buttons, forward only)
+- Accueil work queue:
+  - Status filter tabs (Tous / Enregistré / En cours / Validé)
+  - Text search bar (patient name, exam number, nature — debounced, server-side)
+  - Exam type segmented control (Tous / Histologie / Cytologie)
+  - All filters AND-combined; "✕ Effacer" resets search + type
+- Patient list: inline prélèvements with lazy loading and sex/text filters
+- Patient detail: conclusion previews (120 char truncated)
+- Exam workspace: antécédents section (other exams for same patient with conclusion previews)
+- Report templates: create, edit, delete at `/templates`; applicable from exam workspace
+- All UI labels in French; DB/API values unchanged
 
-## Regression Checklist
-- login
-- patients list
-- create patient
-- patient detail
-- create exam
-- exam detail
-- report save + refresh
-- dashboard counts
+## Known Deferred Items
+
+- Auth hardening (hashed passwords, JWT middleware)
+- No pagination (full lists load in memory)
+- No PDF export
+- No automated test suite
+- No CIN field (requires schema migration)
+- No urgency flag
+- No date range filter on Accueil (no date picker yet)
+- No URL-based filter persistence on Accueil

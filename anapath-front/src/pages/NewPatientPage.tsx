@@ -5,7 +5,8 @@ import { FormField } from '../components/FormField'
 import { PageHeader } from '../components/PageHeader'
 import { PageContainer } from '../layouts/PageContainer'
 import { patientService } from '../services/patientService'
-import type { NewPatientInput, SexDisplay } from '../types/domain'
+import type { NewPatientInput, Patient, SexDisplay } from '../types/domain'
+import { displaySexFrench } from '../utils/domainMappings'
 
 const initialFormState: NewPatientInput = {
   first_name: '',
@@ -23,6 +24,26 @@ export function NewPatientPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
 
+  const [duplicateCandidates, setDuplicateCandidates] = useState<Patient[]>([])
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false)
+  const [confirmed, setConfirmed] = useState(false)
+
+  const doCreate = async () => {
+    setIsSubmitting(true)
+    try {
+      const created = await patientService.create(form)
+      navigate(`/patients/${created.id}`)
+    } catch (submissionError) {
+      const message =
+        submissionError instanceof Error
+          ? submissionError.message
+          : 'Impossible de créer le patient.'
+      setError(message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
@@ -37,20 +58,32 @@ export function NewPatientPage() {
       return
     }
 
-    setIsSubmitting(true)
-
-    try {
-      const created = await patientService.create(form)
-      navigate(`/patients/${created.id}`)
-    } catch (submissionError) {
-      const message =
-        submissionError instanceof Error
-          ? submissionError.message
-          : 'Impossible de créer le patient.'
-      setError(message)
-    } finally {
-      setIsSubmitting(false)
+    // Skip duplicate detection if already confirmed or names are too short
+    const trimmedFirst = form.first_name.trim()
+    const trimmedLast = form.last_name.trim()
+    if (confirmed || trimmedFirst.length < 2 || trimmedLast.length < 2) {
+      await doCreate()
+      return
     }
+
+    // Check for duplicates before creating
+    setIsSubmitting(true)
+    const candidates = await patientService.search(trimmedFirst, trimmedLast, form.phone)
+    setIsSubmitting(false)
+
+    if (candidates.length > 0) {
+      setDuplicateCandidates(candidates)
+      setShowDuplicateWarning(true)
+      return
+    }
+
+    await doCreate()
+  }
+
+  const onConfirmCreate = () => {
+    setConfirmed(true)
+    setShowDuplicateWarning(false)
+    void doCreate()
   }
 
   return (
@@ -149,6 +182,46 @@ export function NewPatientPage() {
           </section>
 
           {error ? <p className="error-message">{error}</p> : null}
+
+          {showDuplicateWarning && duplicateCandidates.length > 0 && (
+            <div className="duplicate-warning-panel">
+              <p className="duplicate-warning-title">Des dossiers similaires ont été trouvés.</p>
+              <p className="duplicate-warning-subtitle">
+                Vérifiez si le patient existe déjà avant de créer un nouveau dossier.
+              </p>
+              <ul className="duplicate-candidates-list">
+                {duplicateCandidates.map((candidate) => (
+                  <li key={candidate.id} className="duplicate-candidate-item">
+                    <span className="duplicate-candidate-info">
+                      {candidate.last_name.toUpperCase()} {candidate.first_name}
+                      {' — '}
+                      {displaySexFrench(candidate.sex)}
+                      {', '}
+                      {candidate.age} ans
+                      {candidate.phone ? ` — ${candidate.phone}` : ''}
+                    </span>
+                    <Link
+                      to={`/patients/${candidate.id}`}
+                      className="duplicate-candidate-link"
+                    >
+                      Voir le dossier →
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <p className="duplicate-warning-confirm-text">
+                Si aucun de ces patients n'est le même, confirmez la création :
+              </p>
+              <button
+                type="button"
+                className="button"
+                onClick={onConfirmCreate}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Enregistrement…' : 'Créer quand même'}
+              </button>
+            </div>
+          )}
 
           <div className="form-actions form-actions-sticky">
             <Link to="/patients" className="button tertiary">

@@ -8,7 +8,8 @@ import { PageContainer } from '../layouts/PageContainer'
 import { examService } from '../services/examService'
 import type { UpdateExamInput } from '../services/examService'
 import { patientService } from '../services/patientService'
-import type { Exam, ExamWithReportSummary, ReportInput } from '../types/domain'
+import { reportTemplateService } from '../services/reportTemplateService'
+import type { Exam, ExamWithReportSummary, ReportInput, ReportTemplate } from '../types/domain'
 import { mapExamStatusToBackend } from '../utils/domainMappings'
 import { formatDate, truncate } from '../utils/formatting'
 
@@ -97,6 +98,16 @@ export function ExamDetailPage() {
   const [isStatusUpdating, setIsStatusUpdating] = useState(false)
   const [statusError, setStatusError] = useState('')
 
+  // Templates
+  const [templates, setTemplates] = useState<ReportTemplate[]>([])
+  const [pendingTemplate, setPendingTemplate] = useState<ReportTemplate | null>(null)
+  const [showConfirmApply, setShowConfirmApply] = useState(false)
+  const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false)
+  const [saveAsTemplateName, setSaveAsTemplateName] = useState('')
+  const [saveAsTemplateError, setSaveAsTemplateError] = useState('')
+  const [saveAsTemplateInfo, setSaveAsTemplateInfo] = useState('')
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false)
+
   // Load exam + report --------------------------------------------------------
   useEffect(() => {
     const load = async () => {
@@ -144,6 +155,86 @@ export function ExamDetailPage() {
     }
     void loadReport()
   }, [id, exam])
+
+  // Load templates ------------------------------------------------------------
+  useEffect(() => {
+    const loadTemplates = async () => {
+      try {
+        const data = await reportTemplateService.list()
+        setTemplates(data)
+      } catch {
+        // non-critical — fail silently
+      }
+    }
+    void loadTemplates()
+  }, [])
+
+  // Template application logic ------------------------------------------------
+  const handleApplyTemplate = (templateId: string) => {
+    const template = templates.find((t) => String(t.id) === templateId)
+    if (!template) return
+    const reportHasContent =
+      report.clinical_info.trim() ||
+      report.macroscopy.trim() ||
+      report.microscopy.trim() ||
+      report.conclusion.trim()
+    if (reportHasContent) {
+      setPendingTemplate(template)
+      setShowConfirmApply(true)
+    } else {
+      applyTemplate(template)
+    }
+  }
+
+  const applyTemplate = (template: ReportTemplate) => {
+    setReport({
+      clinical_info: template.clinical_info,
+      macroscopy: template.macroscopy,
+      microscopy: template.microscopy,
+      conclusion: template.conclusion,
+    })
+    setShowConfirmApply(false)
+    setPendingTemplate(null)
+  }
+
+  const handleSaveAsTemplate = async () => {
+    setSaveAsTemplateError('')
+    setSaveAsTemplateInfo('')
+    if (!saveAsTemplateName.trim()) {
+      setSaveAsTemplateError('Le nom du modèle est obligatoire.')
+      return
+    }
+    const hasContent =
+      report.clinical_info.trim() ||
+      report.macroscopy.trim() ||
+      report.microscopy.trim() ||
+      report.conclusion.trim()
+    if (!hasContent) {
+      setSaveAsTemplateError('Le compte rendu doit contenir au moins un champ non vide.')
+      return
+    }
+    setIsSavingTemplate(true)
+    try {
+      await reportTemplateService.create({
+        name: saveAsTemplateName.trim(),
+        clinical_info: report.clinical_info,
+        macroscopy: report.macroscopy,
+        microscopy: report.microscopy,
+        conclusion: report.conclusion,
+      })
+      const updated = await reportTemplateService.list()
+      setTemplates(updated)
+      setSaveAsTemplateName('')
+      setSaveAsTemplateOpen(false)
+      setSaveAsTemplateInfo('Modèle enregistré.')
+    } catch (err) {
+      setSaveAsTemplateError(
+        err instanceof Error ? err.message : "Impossible d'enregistrer le modèle."
+      )
+    } finally {
+      setIsSavingTemplate(false)
+    }
+  }
 
   // Load patient name + antecedents ------------------------------------------
   useEffect(() => {
@@ -540,6 +631,43 @@ export function ExamDetailPage() {
         </div>
 
         <form className="form-layout report-form-layout" onSubmit={onSubmitReport}>
+          {templates.length > 0 && (
+            <div className="template-picker-row">
+              <select
+                value=""
+                onChange={(e) => handleApplyTemplate(e.target.value)}
+                disabled={isReportLoading || isSubmitting}
+              >
+                <option value="" disabled>Appliquer un modèle…</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={String(t.id)}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {showConfirmApply && pendingTemplate && (
+            <div className="template-confirm-banner">
+              <span>Ce modèle remplacera le contenu existant.</span>
+              <div className="template-confirm-actions">
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => applyTemplate(pendingTemplate)}
+                >
+                  Confirmer
+                </button>
+                <button
+                  type="button"
+                  className="button tertiary"
+                  onClick={() => { setShowConfirmApply(false); setPendingTemplate(null) }}
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="form-grid">
             <FormField label="Renseignement clinique" htmlFor="clinical_info">
               <textarea
@@ -586,9 +714,49 @@ export function ExamDetailPage() {
             {isReportLoading ? <p className="report-loading">Chargement du compte rendu…</p> : null}
             {reportError ? <p className="error-message">{reportError}</p> : null}
             {reportInfo ? <p className="success-message">{reportInfo}</p> : null}
+            {saveAsTemplateInfo ? <p className="success-message">{saveAsTemplateInfo}</p> : null}
           </div>
 
+          {saveAsTemplateOpen && (
+            <div className="save-as-template-row">
+              <input
+                type="text"
+                placeholder="Nom du modèle"
+                value={saveAsTemplateName}
+                onChange={(e) => setSaveAsTemplateName(e.target.value)}
+                disabled={isSavingTemplate}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleSaveAsTemplate() } }}
+                autoFocus
+              />
+              <button
+                type="button"
+                className="button"
+                onClick={() => void handleSaveAsTemplate()}
+                disabled={isSavingTemplate}
+              >
+                {isSavingTemplate ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+              <button
+                type="button"
+                className="button tertiary"
+                onClick={() => { setSaveAsTemplateOpen(false); setSaveAsTemplateName(''); setSaveAsTemplateError('') }}
+                disabled={isSavingTemplate}
+              >
+                Annuler
+              </button>
+              {saveAsTemplateError ? <p className="error-message">{saveAsTemplateError}</p> : null}
+            </div>
+          )}
+
           <div className="form-actions form-actions-sticky">
+            <button
+              type="button"
+              className="button tertiary"
+              disabled={isReportLoading || isSubmitting}
+              onClick={() => { setSaveAsTemplateOpen((v) => !v); setSaveAsTemplateError(''); setSaveAsTemplateInfo('') }}
+            >
+              Sauvegarder comme modèle
+            </button>
             <button
               type="submit"
               className="button"

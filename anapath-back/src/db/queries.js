@@ -58,6 +58,22 @@ export async function updatePatientById(patientId, payload) {
   return result.rows[0] || null;
 }
 
+export async function searchPatientsByName(labId, firstName, lastName, phone = '') {
+  const normalizedPhone = phone ? phone.replace(/\D/g, '') : '';
+  const result = await query(
+    `SELECT * FROM patients
+     WHERE laboratory_id = $1
+       AND (
+         (LOWER(first_name) ILIKE $2 AND LOWER(last_name) ILIKE $3)
+         OR ($4 <> '' AND regexp_replace(phone, '[^0-9]', '', 'g') = $4)
+       )
+     ORDER BY last_name, first_name
+     LIMIT 5`,
+    [labId, `%${firstName.toLowerCase()}%`, `%${lastName.toLowerCase()}%`, normalizedPhone]
+  );
+  return result.rows;
+}
+
 export async function findExamsByPatientId(patientId) {
   const result = await query(
     'SELECT * FROM exams WHERE patient_id = $1 ORDER BY created_at DESC',
@@ -92,14 +108,36 @@ export async function findAllExams(filters = {}) {
     FROM exams e
     LEFT JOIN patients p ON p.id = e.patient_id
   `;
+  const conditions = [];
+  const params = [];
+
   if (filters.status) {
-    const result = await query(
-      `${baseQuery} WHERE e.status = $1 ORDER BY e.created_at DESC`,
-      [filters.status]
-    );
-    return result.rows;
+    params.push(filters.status);
+    conditions.push(`e.status = $${params.length}`);
   }
-  const result = await query(`${baseQuery} ORDER BY e.created_at DESC`);
+
+  if (filters.exam_type) {
+    params.push(filters.exam_type);
+    conditions.push(`e.exam_type = $${params.length}`);
+  }
+
+  if (filters.search) {
+    const term = `%${filters.search}%`;
+    params.push(term);
+    const n = params.length;
+    conditions.push(`(
+      p.last_name ILIKE $${n}
+      OR p.first_name ILIKE $${n}
+      OR e.exam_number ILIKE $${n}
+      OR e.sample_nature ILIKE $${n}
+    )`);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const result = await query(
+    `${baseQuery} ${whereClause} ORDER BY e.created_at DESC`,
+    params
+  );
   return result.rows;
 }
 
@@ -268,6 +306,63 @@ export async function updateReportByExamId(examId, payload) {
     ]
   );
 
+  return result.rows[0] || null;
+}
+
+export async function findAllTemplatesByLabId(labId) {
+  const result = await query(
+    'SELECT * FROM report_templates WHERE laboratory_id = $1 ORDER BY name ASC',
+    [labId]
+  );
+  return result.rows;
+}
+
+export async function createTemplate(payload) {
+  const result = await query(
+    `INSERT INTO report_templates (laboratory_id, name, clinical_info, macroscopy, microscopy, conclusion)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [
+      payload.laboratory_id,
+      payload.name,
+      payload.clinical_info || '',
+      payload.macroscopy || '',
+      payload.microscopy || '',
+      payload.conclusion || '',
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function updateTemplateById(templateId, payload) {
+  const result = await query(
+    `UPDATE report_templates
+     SET
+       name          = COALESCE($2, name),
+       clinical_info  = COALESCE($3, clinical_info),
+       macroscopy     = COALESCE($4, macroscopy),
+       microscopy     = COALESCE($5, microscopy),
+       conclusion     = COALESCE($6, conclusion),
+       updated_at     = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [
+      templateId,
+      payload.name,
+      payload.clinical_info,
+      payload.macroscopy,
+      payload.microscopy,
+      payload.conclusion,
+    ]
+  );
+  return result.rows[0] || null;
+}
+
+export async function deleteTemplateById(templateId) {
+  const result = await query(
+    'DELETE FROM report_templates WHERE id = $1 RETURNING *',
+    [templateId]
+  );
   return result.rows[0] || null;
 }
 

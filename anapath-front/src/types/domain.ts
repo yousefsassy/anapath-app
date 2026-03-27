@@ -92,3 +92,15 @@ export interface ReportSummary {
 export interface ExamWithReportSummary extends Exam {
   report_summary: ReportSummary | null
 }
+
+export interface ReportTemplate {
+  id: number
+  laboratory_id: number
+  name: string
+  clinical_info: string
+  macroscopy: string
+  microscopy: string
+  conclusion: string
+  created_at: string
+  updated_at: string
+}

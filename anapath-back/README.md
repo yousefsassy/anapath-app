@@ -1,13 +1,12 @@
-# Anapath Backend (PostgreSQL)
+# Anapath Backend
 
-Beginner-friendly Express backend for an anatomopathology laboratory app.
+Express + PostgreSQL backend for the Anapath anatomopathology workflow app.
 
-## What this version uses
+## Stack
 
 - Node.js + Express
 - PostgreSQL with plain SQL (`pg`)
-- Same API routes as before
-- Database-backed exam number generation
+- Database-backed exam number generation via `exam_sequences`
 
 ## Project structure
 
@@ -79,6 +78,7 @@ After these commands, you can open pgAdmin and see the tables:
 - `exams`
 - `reports`
 - `exam_sequences`
+- `report_templates`
 
 ## 3) Start backend
 
@@ -96,18 +96,23 @@ The server log prints the URL to test.
 
 ## API endpoints
 
-- `GET /`
 - `GET /api/health`
-- `POST /api/auth/login` (minimal placeholder)
+- `POST /api/auth/login` (placeholder)
 - `GET /api/patients`
 - `POST /api/patients`
 - `GET /api/patients/:id`
-- `GET /api/patients/:id/exams`
-- `GET /api/exams`
+- `PUT /api/patients/:id`
+- `GET /api/patients/:id/exams` — accepts `?include=report_summary` to join report conclusion per exam
+- `GET /api/exams` — accepts `?status=`, `?exam_type=`, `?search=` filters (all optional, ANDed)
 - `POST /api/exams`
 - `GET /api/exams/:id`
+- `PUT /api/exams/:id`
 - `GET /api/reports/:examId`
 - `PUT /api/reports/:examId`
+- `GET /api/report-templates`
+- `POST /api/report-templates`
+- `PUT /api/report-templates/:id`
+- `DELETE /api/report-templates/:id`
 
 ## Exam number logic (persistent)
 

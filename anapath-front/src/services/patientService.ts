@@ -67,6 +67,16 @@ export const patientService = {
     })
   },
 
+  search: async (firstName: string, lastName: string, phone = ''): Promise<Patient[]> => {
+    const params = new URLSearchParams({ first_name: firstName, last_name: lastName })
+    if (phone.trim()) params.set('phone', phone.trim())
+    try {
+      return await apiClient.get<Patient[]>(`/patients/search?${params.toString()}`)
+    } catch {
+      return [] // fail open — never block creation due to a search error
+    }
+  },
+
   update: async (id: number | string, payload: UpdatePatientInput): Promise<Patient | null> => {
     try {
       return await apiClient.put<Patient>(`/patients/${id}`, {

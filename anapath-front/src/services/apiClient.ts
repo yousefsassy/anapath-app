@@ -65,4 +65,6 @@ export const apiClient = {
       body: body ? JSON.stringify(body) : undefined,
       ...options,
     }),
+  delete: <T>(endpoint: string, options?: RequestOptions) =>
+    request<T>(endpoint, { method: 'DELETE', ...options }),
 }

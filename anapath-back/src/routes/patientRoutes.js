@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getPatients,
   createPatient,
+  searchPatients,
   getPatientById,
   getPatientExams,
   updatePatient,
@@ -11,6 +12,7 @@ const router = Router();
 
 router.get('/', getPatients);
 router.post('/', createPatient);
+router.get('/search', searchPatients);   // must be before /:id
 router.get('/:id/exams', getPatientExams);
 router.get('/:id', getPatientById);
 router.put('/:id', updatePatient);

@@ -9,6 +9,7 @@ import { NewPatientPage } from './pages/NewPatientPage.tsx'
 import { PatientDetailPage } from './pages/PatientDetailPage.tsx'
 import { NewExamPage } from './pages/NewExamPage.tsx'
 import { ExamDetailPage } from './pages/ExamDetailPage.tsx'
+import { TemplatesPage } from './pages/TemplatesPage.tsx'
 import { NotFoundPage } from './pages/NotFoundPage.tsx'
 
 function RootRedirect() {
@@ -31,6 +32,7 @@ function App() {
           <Route path="/patients/:id" element={<PatientDetailPage />} />
           <Route path="/patients/:id/exams/new" element={<NewExamPage />} />
           <Route path="/exams/:id" element={<ExamDetailPage />} />
+          <Route path="/templates" element={<TemplatesPage />} />
         </Route>
       </Route>
 

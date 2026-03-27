@@ -4,6 +4,7 @@ import authRoutes from './authRoutes.js';
 import patientRoutes from './patientRoutes.js';
 import examRoutes from './examRoutes.js';
 import reportRoutes from './reportRoutes.js';
+import reportTemplateRoutes from './reportTemplateRoutes.js';
 
 const router = Router();
 
@@ -12,5 +13,6 @@ router.use('/auth', authRoutes);
 router.use('/patients', patientRoutes);
 router.use('/exams', examRoutes);
 router.use('/reports', reportRoutes);
+router.use('/report-templates', reportTemplateRoutes);
 
 export default router;

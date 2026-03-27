@@ -75,6 +75,18 @@ CREATE TABLE IF NOT EXISTS exam_sequences (
   UNIQUE (laboratory_id, exam_type)
 );
 
+CREATE TABLE IF NOT EXISTS report_templates (
+  id            SERIAL PRIMARY KEY,
+  laboratory_id INTEGER NOT NULL REFERENCES laboratories(id) ON DELETE RESTRICT,
+  name          TEXT NOT NULL,
+  clinical_info  TEXT NOT NULL DEFAULT '',
+  macroscopy     TEXT NOT NULL DEFAULT '',
+  microscopy     TEXT NOT NULL DEFAULT '',
+  conclusion     TEXT NOT NULL DEFAULT '',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_patients_laboratory_id ON patients(laboratory_id);
 CREATE INDEX IF NOT EXISTS idx_exams_laboratory_id ON exams(laboratory_id);
 CREATE INDEX IF NOT EXISTS idx_exams_patient_id ON exams(patient_id);

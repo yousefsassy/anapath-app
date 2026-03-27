@@ -8,6 +8,7 @@ import type { Exam } from '../types/domain'
 import { formatDate } from '../utils/formatting'
 
 type StatusFilter = 'all' | 'registered' | 'in_progress' | 'completed'
+type ExamTypeFilter = 'all' | 'histology' | 'cytology'
 
 const STATUS_TABS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'Tous' },
@@ -16,21 +17,37 @@ const STATUS_TABS: { value: StatusFilter; label: string }[] = [
   { value: 'completed', label: 'Validé' },
 ]
 
+const EXAM_TYPE_BUTTONS: { value: ExamTypeFilter; label: string }[] = [
+  { value: 'all', label: 'Tous' },
+  { value: 'histology', label: 'Histologie' },
+  { value: 'cytology', label: 'Cytologie' },
+]
 
 export function DashboardPage() {
   const navigate = useNavigate()
   const [exams, setExams] = useState<Exam[]>([])
   const [activeFilter, setActiveFilter] = useState<StatusFilter>('all')
+  const [examTypeFilter, setExamTypeFilter] = useState<ExamTypeFilter>('all')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
   useEffect(() => {
     const loadExams = async () => {
       setLoading(true)
       setError(null)
       try {
-        const status = activeFilter === 'all' ? undefined : activeFilter
-        const data = await examService.list(status)
+        const data = await examService.list({
+          status: activeFilter === 'all' ? undefined : activeFilter,
+          exam_type: examTypeFilter === 'all' ? undefined : examTypeFilter,
+          search: debouncedSearch.trim() || undefined,
+        })
         setExams(data)
       } catch {
         setError('Impossible de charger les prélèvements.')
@@ -40,7 +57,14 @@ export function DashboardPage() {
     }
 
     void loadExams()
-  }, [activeFilter])
+  }, [activeFilter, examTypeFilter, debouncedSearch])
+
+  const hasActiveFilters = searchTerm !== '' || examTypeFilter !== 'all'
+
+  const clearFilters = () => {
+    setSearchTerm('')
+    setExamTypeFilter('all')
+  }
 
   return (
     <PageContainer maxWidth="wide">
@@ -66,6 +90,41 @@ export function DashboardPage() {
               {tab.label}
             </button>
           ))}
+        </div>
+
+        <div className="accueil-toolbar">
+          <div className="accueil-search-wrapper">
+            <svg className="accueil-search-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="6.5" cy="6.5" r="4.5" />
+              <path d="M10.5 10.5L14 14" strokeLinecap="round" />
+            </svg>
+            <input
+              className="accueil-search"
+              type="text"
+              placeholder="Rechercher patient, référence, nature…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <div className="accueil-type-segmented">
+            {EXAM_TYPE_BUTTONS.map((btn) => (
+              <button
+                key={btn.value}
+                type="button"
+                className={`accueil-type-btn${examTypeFilter === btn.value ? ' accueil-type-btn--active' : ''}`}
+                onClick={() => setExamTypeFilter(btn.value)}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </div>
+
+          {hasActiveFilters && (
+            <button type="button" className="accueil-clear-btn" onClick={clearFilters}>
+              ✕ Effacer
+            </button>
+          )}
         </div>
 
         <div className="table-wrapper">

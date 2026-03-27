@@ -5,6 +5,7 @@ import {
   findExamsByPatientId,
   findExamsByPatientIdWithReportSummary,
   updatePatientById,
+  searchPatientsByName,
 } from '../db/queries.js';
 
 function validatePatientPayload(payload) {
@@ -24,6 +25,25 @@ function validatePatientPayload(payload) {
   }
 
   return null;
+}
+
+export async function searchPatients(req, res, next) {
+  try {
+    const { first_name = '', last_name = '', phone = '' } = req.query;
+    const labId = 1; // placeholder — no auth middleware yet
+
+    if (!first_name.trim() && !last_name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Au moins un champ de recherche est requis.',
+      });
+    }
+
+    const patients = await searchPatientsByName(labId, first_name.trim(), last_name.trim(), phone);
+    return res.status(200).json({ success: true, data: patients });
+  } catch (error) {
+    return next(error);
+  }
 }
 
 export async function getPatients(req, res, next) {

@@ -61,10 +61,20 @@ function toReportInput(value: Partial<ReportInput> | null | undefined): ReportIn
   }
 }
 
+export interface ExamListFilters {
+  status?: 'registered' | 'in_progress' | 'completed'
+  exam_type?: 'histology' | 'cytology'
+  search?: string
+}
+
 export const examService = {
-  list: async (status?: 'registered' | 'in_progress' | 'completed'): Promise<Exam[]> => {
-    const url = status ? `/exams?status=${status}` : '/exams'
-    return apiClient.get<Exam[]>(url)
+  list: async (filters: ExamListFilters = {}): Promise<Exam[]> => {
+    const params = new URLSearchParams()
+    if (filters.status) params.set('status', filters.status)
+    if (filters.exam_type) params.set('exam_type', filters.exam_type)
+    if (filters.search?.trim()) params.set('search', filters.search.trim())
+    const qs = params.toString()
+    return apiClient.get<Exam[]>(qs ? `/exams?${qs}` : '/exams')
   },
 
   updateStatus: async (id: number | string, status: 'registered' | 'in_progress' | 'completed'): Promise<Exam | null> => {

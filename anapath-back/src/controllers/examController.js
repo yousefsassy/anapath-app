@@ -21,19 +21,27 @@ function validateExamPayload(payload) {
 }
 
 const VALID_STATUSES = ['registered', 'in_progress', 'completed'];
+const VALID_EXAM_TYPES = ['histology', 'cytology'];
 
 export async function getExams(req, res, next) {
   try {
-    const filters = {};
-    if (req.query.status) {
-      if (!VALID_STATUSES.includes(req.query.status)) {
-        return res.status(400).json({
-          success: false,
-          message: `Statut invalide. Valeurs acceptées : ${VALID_STATUSES.join(', ')}`,
-        });
-      }
-      filters.status = req.query.status;
+    if (req.query.status && !VALID_STATUSES.includes(req.query.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Statut invalide. Valeurs acceptées : ${VALID_STATUSES.join(', ')}`,
+      });
     }
+    if (req.query.exam_type && !VALID_EXAM_TYPES.includes(req.query.exam_type)) {
+      return res.status(400).json({
+        success: false,
+        message: `Type d'examen invalide. Valeurs acceptées : ${VALID_EXAM_TYPES.join(', ')}`,
+      });
+    }
+    const filters = {
+      ...(req.query.status ? { status: req.query.status } : {}),
+      ...(req.query.exam_type ? { exam_type: req.query.exam_type } : {}),
+      ...(req.query.search?.trim() ? { search: req.query.search.trim() } : {}),
+    };
     const exams = await findAllExams(filters);
     return res.status(200).json({ success: true, data: exams });
   } catch (error) {
