@@ -1422,7 +1422,408 @@ td {
   margin-left: 4px;
 }
 
+/* Print page */
+.print-page-root {
+  min-height: 100vh;
+  padding: 24px;
+  background: #eef2f4;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
+.print-toolbar {
+  width: 100%;
+  max-width: 210mm;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.print-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  background: #ffffff;
+  color: #111111;
+  border: 1px solid #d8d8d8;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  padding: 12mm 14mm 14mm;
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 12.8px;
+  line-height: 1.45;
+}
+
+.print-entete {
+  margin-bottom: 10mm;
+}
+
+.print-entete-image {
+  width: 100%;
+  max-height: 36mm;
+  object-fit: contain;
+  object-position: left center;
+  display: block;
+}
+
+.print-entete-fallback {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8mm;
+}
+
+.print-entete-left {
+  flex: 1;
+}
+
+.print-entete-right {
+  flex: 1;
+  text-align: center;
+}
+
+.print-entete-fallback p {
+  margin: 1px 0;
+  font-size: 11px;
+}
+
+.print-entete-doctor {
+  font-weight: 700;
+  font-size: 13px !important;
+  margin-bottom: 2px !important;
+}
+
+.print-entete-lab {
+  font-weight: 700;
+  font-size: 12px !important;
+  margin-bottom: 2px !important;
+}
+
+.print-separator {
+  border: none;
+  border-top: 1px solid #333;
+  margin: 5mm 0;
+}
+
+.print-exam-block {
+  margin-bottom: 0;
+}
+
+.print-meta-columns {
+  display: flex;
+  justify-content: space-between;
+  gap: 8mm;
+}
+
+.print-meta-left {
+  flex: 1;
+}
+
+.print-meta-right {
+  flex: 1;
+}
+
+.print-meta-left p,
+.print-meta-right p {
+  margin: 1.5mm 0;
+  font-size: 12.8px;
+}
+
+.print-meta-label {
+  font-weight: 700;
+}
+
+.print-requesting-doctor {
+  white-space: pre-wrap;
+}
+
+.print-report-block {
+  padding-top: 0;
+}
+
+.print-section {
+  margin-bottom: 6mm;
+}
+
+.print-section p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.print-section-label {
+  font-weight: 700;
+}
+
+.print-section-label--underline {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.print-sample-title {
+  margin: 4mm 0 2mm;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.print-conclusion {
+  margin-top: 4mm;
+  border: 1px solid #333;
+  padding: 3mm;
+}
+
+.print-conclusion-label {
+  font-weight: 700;
+  margin: 0 0 1mm;
+}
+
+.print-conclusion-text {
+  font-weight: 700;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* kept for backwards compatibility — use .print-sample-title instead */
+.print-main-medical-title {
+  margin: 4mm 0 2mm;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.print-signature-area {
+  margin-top: 14mm;
+  min-height: 28mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.print-signature-area p {
+  margin: 1mm 0;
+}
+
+.print-signature-text {
+  font-style: italic;
+  font-size: 11px;
+}
+
+/* When a signature image is provided at /signature-cachet.png */
+.print-signature-image {
+  max-width: 70mm;
+  max-height: 26mm;
+  object-fit: contain;
+}
+
+/* Suppress screen-only decoration during PDF export */
+.print-sheet--exporting {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Formatting panel ──────────────────────────────────────────── */
+.print-format-panel {
+  width: 100%;
+  max-width: 210mm;
+  background: #ffffff;
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.print-format-panel-toggle {
+  width: 100%;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111;
+  text-align: left;
+}
+
+.print-format-panel-toggle:hover {
+  background: var(--surface-soft);
+}
+
+.print-format-panel-body {
+  padding: 12px 14px 4px;
+  border-top: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.print-format-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.print-format-row-label {
+  font-size: 12px;
+  color: #555;
+  width: 170px;
+  flex-shrink: 0;
+}
+
+.print-format-segmented {
+  display: flex;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.print-format-segmented button {
+  padding: 4px 12px;
+  font-size: 12px;
+  border: none;
+  border-left: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  color: #444;
+  line-height: 1.5;
+}
+
+.print-format-segmented button:first-child {
+  border-left: none;
+}
+
+.print-format-segmented button:hover {
+  background: var(--surface-soft);
+}
+
+.print-format-segmented button.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.print-format-panel-footer {
+  padding: 8px 14px 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.print-format-reset {
+  font-size: 12px;
+  color: #999;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.print-format-reset:hover {
+  color: #444;
+}
+
+/* ── Print sheet modifier classes ─────────────────────────────── */
+
+/* Spacing — scoped to report sections only */
+.print-sheet--spacing-compact .print-section {
+  margin-bottom: 2mm;
+}
+
+.print-sheet--spacing-spacious .print-section {
+  margin-bottom: 10mm;
+}
+
+/* Label style — scoped to report section labels only, NOT .print-meta-label */
+.print-sheet--label-bold .print-section-label--underline {
+  text-decoration: none;
+}
+
+.print-sheet--label-normal .print-section-label,
+.print-sheet--label-normal .print-section-label--underline {
+  font-weight: 400;
+  text-decoration: none;
+}
+
+/* Conclusion style */
+.print-sheet--conclusion-plain .print-conclusion {
+  border: none;
+  padding: 0;
+}
+
+/* Font size */
+.print-sheet--font-small {
+  font-size: 11px;
+}
+
+.print-sheet--font-large {
+  font-size: 14px;
+}
+
+.print-page-screen-state {
+  min-height: 100vh;
+  display: grid;
+  gap: 12px;
+  align-content: center;
+  justify-items: center;
+  padding: 20px;
+}
+
+@page {
+  size: A4;
+  margin: 10mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #ffffff;
+  }
+
+  #root {
+    min-height: auto;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-page-root {
+    background: #ffffff;
+    padding: 0;
+    min-height: auto;
+    display: block;
+  }
+
+  .print-sheet {
+    width: auto;
+    min-height: auto;
+    border: 0;
+    box-shadow: none;
+    margin: 0;
+    padding: 0;
+  }
+}
+
 @media (max-width: 980px) {
+  .print-page-root {
+    padding: 12px;
+  }
+
+  .print-sheet {
+    width: 100%;
+    min-height: auto;
+    padding: 14px;
+  }
+
+  .print-meta-columns {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .print-entete-fallback {
+    flex-direction: column;
+    gap: 4px;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
   }

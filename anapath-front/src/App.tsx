@@ -9,6 +9,7 @@ import { NewPatientPage } from './pages/NewPatientPage.tsx'
 import { PatientDetailPage } from './pages/PatientDetailPage.tsx'
 import { NewExamPage } from './pages/NewExamPage.tsx'
 import { ExamDetailPage } from './pages/ExamDetailPage.tsx'
+import { ExamPrintPage } from './pages/ExamPrintPage.tsx'
 import { TemplatesPage } from './pages/TemplatesPage.tsx'
 import { NotFoundPage } from './pages/NotFoundPage.tsx'
 
@@ -25,6 +26,8 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
 
       <Route element={<ProtectedRoute />}>
+        <Route path="/exams/:id/print" element={<ExamPrintPage />} />
+
         <Route element={<MainLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/patients" element={<PatientsListPage />} />

@@ -402,6 +402,15 @@ export function ExamDetailPage() {
             <div className="form-actions exam-detail-status-actions">
               <StatusBadge status={exam.status} />
 
+              <Link
+                to={`/exams/${id}/print`}
+                className="button tertiary"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Aperçu PDF
+              </Link>
+
               {!isEditingExam && statusAction ? (
                 <button
                   type="button"
@@ -459,7 +468,7 @@ export function ExamDetailPage() {
                   </select>
                 </FormField>
 
-                <FormField label="Médecin prescripteur" htmlFor="requesting_doctor">
+                <FormField label="Demandé par" htmlFor="requesting_doctor">
                   <input
                     id="requesting_doctor"
                     value={examForm.requesting_doctor}
@@ -468,7 +477,7 @@ export function ExamDetailPage() {
                   />
                 </FormField>
 
-                <FormField label="Clinique / Établissement" htmlFor="clinic_name">
+                <FormField label="Clinique" htmlFor="clinic_name">
                   <input
                     id="clinic_name"
                     value={examForm.clinic_name}
@@ -477,7 +486,7 @@ export function ExamDetailPage() {
                   />
                 </FormField>
 
-                <FormField label="Date de réception" htmlFor="registered_date">
+                <FormField label="Enregistré le" htmlFor="registered_date">
                   <input
                     id="registered_date"
                     type="date"
@@ -487,7 +496,7 @@ export function ExamDetailPage() {
                   />
                 </FormField>
 
-                <FormField label="Date de demande" htmlFor="requested_date">
+                <FormField label="Examen demandé le" htmlFor="requested_date">
                   <input
                     id="requested_date"
                     type="date"
@@ -497,7 +506,7 @@ export function ExamDetailPage() {
                   />
                 </FormField>
 
-                <FormField label="Date de rendu" htmlFor="result_issued_date">
+                <FormField label="Résultat émis le" htmlFor="result_issued_date">
                   <input
                     id="result_issued_date"
                     type="date"
@@ -549,23 +558,23 @@ export function ExamDetailPage() {
                 <dd>{exam.exam_type === 'histology' ? 'Histologie' : exam.exam_type === 'cytology' ? 'Cytologie' : exam.exam_type || '—'}</dd>
               </div>
               <div className="exam-detail-meta-item">
-                <dt>Médecin prescripteur</dt>
+                <dt>Demandé par</dt>
                 <dd>{exam.requesting_doctor || '—'}</dd>
               </div>
               <div className="exam-detail-meta-item">
-                <dt>Clinique / Établissement</dt>
+                <dt>Clinique</dt>
                 <dd>{exam.clinic_name || '—'}</dd>
               </div>
               <div className="exam-detail-meta-item">
-                <dt>Date de réception</dt>
+                <dt>Enregistré le</dt>
                 <dd>{formatDate(exam.registered_date)}</dd>
               </div>
               <div className="exam-detail-meta-item">
-                <dt>Date de demande</dt>
+                <dt>Examen demandé le</dt>
                 <dd>{formatDate(exam.requested_date)}</dd>
               </div>
               <div className="exam-detail-meta-item">
-                <dt>Date de rendu</dt>
+                <dt>Résultat émis le</dt>
                 <dd>{formatDate(exam.result_issued_date)}</dd>
               </div>
               <div className="exam-detail-meta-item exam-detail-meta-item--full">
@@ -669,7 +678,7 @@ export function ExamDetailPage() {
           )}
 
           <div className="form-grid">
-            <FormField label="Renseignement clinique" htmlFor="clinical_info">
+            <FormField label="RC" htmlFor="clinical_info">
               <textarea
                 id="clinical_info"
                 rows={4}

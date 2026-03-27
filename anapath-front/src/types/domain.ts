@@ -104,3 +104,17 @@ export interface ReportTemplate {
   created_at: string
   updated_at: string
 }
+
+export interface PrintSettings {
+  sectionSpacing: 'compact' | 'normal' | 'spacious'
+  labelStyle: 'underline-bold' | 'bold' | 'normal'
+  conclusionStyle: 'boxed' | 'plain'
+  fontSize: 'small' | 'normal' | 'large'
+}
+
+export const defaultPrintSettings: PrintSettings = {
+  sectionSpacing: 'normal',
+  labelStyle: 'underline-bold',
+  conclusionStyle: 'boxed',
+  fontSize: 'normal',
+}

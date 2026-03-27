@@ -116,7 +116,7 @@ export function NewExamPage() {
                 />
               </FormField>
 
-              <FormField label="Médecin prescripteur" htmlFor="requesting_doctor">
+              <FormField label="Demandé par" htmlFor="requesting_doctor">
                 <input
                   id="requesting_doctor"
                   placeholder="Nom du médecin demandeur"
@@ -125,7 +125,7 @@ export function NewExamPage() {
                 />
               </FormField>
 
-              <FormField label="Clinique / Établissement" htmlFor="clinic_name">
+              <FormField label="Clinique" htmlFor="clinic_name">
                 <input
                   id="clinic_name"
                   placeholder="Nom de la clinique ou de l'hôpital"
@@ -144,7 +144,7 @@ export function NewExamPage() {
             </div>
 
             <div className="form-grid">
-              <FormField label="Date de réception" htmlFor="registered_date">
+              <FormField label="Enregistré le" htmlFor="registered_date">
                 <input
                   id="registered_date"
                   type="date"
@@ -153,7 +153,7 @@ export function NewExamPage() {
                 />
               </FormField>
 
-              <FormField label="Date de demande" htmlFor="requested_date">
+              <FormField label="Examen demandé le" htmlFor="requested_date">
                 <input
                   id="requested_date"
                   type="date"
@@ -162,7 +162,7 @@ export function NewExamPage() {
                 />
               </FormField>
 
-              <FormField label="Date de rendu prévue" htmlFor="result_issued_date">
+              <FormField label="Résultat émis le" htmlFor="result_issued_date">
                 <input
                   id="result_issued_date"
                   type="date"
