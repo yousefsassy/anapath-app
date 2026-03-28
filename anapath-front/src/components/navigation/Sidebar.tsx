@@ -1,4 +1,4 @@
-import { BookOpen, ClipboardList, LayoutDashboard } from 'lucide-react'
+import { BookOpen, ClipboardList, LayoutDashboard, Settings } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { NavItem } from './NavItem'
@@ -7,6 +7,7 @@ const navigation = [
   { to: '/dashboard', label: 'Accueil', icon: LayoutDashboard },
   { to: '/patients', label: 'Patients', icon: ClipboardList },
   { to: '/templates', label: 'Modèles', icon: BookOpen },
+  { to: '/settings', label: 'Paramètres', icon: Settings },
 ]
 
 export function Sidebar() {

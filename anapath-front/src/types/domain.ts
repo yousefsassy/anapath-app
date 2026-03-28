@@ -118,3 +118,23 @@ export const defaultPrintSettings: PrintSettings = {
   conclusionStyle: 'boxed',
   fontSize: 'normal',
 }
+
+export interface LabSettings {
+  doctorName: string
+  doctorTitle: string  // newline-separated lines (title, affiliation, etc.)
+  doctorPhone: string
+  doctorEmail: string
+  labName: string
+  labAddress: string   // newline-separated lines
+  labPhone: string
+}
+
+export const defaultLabSettings: LabSettings = {
+  doctorName: 'DOCTEUR SAMIA HANNACHI SASSI',
+  doctorTitle: 'Ancienne Assistante Hospitalo-Universitaire\nInstitut Salah Azaiez',
+  doctorPhone: '(+216) 98 315 221 - (+216) 24 315 221',
+  doctorEmail: 'anapath.labo@gmail.com',
+  labName: "LABORATOIRE D'ANATOMIE ET CYTOLOGIE PATHOLOGIQUES",
+  labAddress: 'Immeuble Nour City, Bloc A, 2ème étage Appt. A2-1,\nCentre Urbain Nord, 1003 Tunis',
+  labPhone: '(+216) 36 28 28 61',
+}

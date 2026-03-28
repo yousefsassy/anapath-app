@@ -29,6 +29,7 @@ The backend provides the Anapath V1 API for doctor-only workflow operations:
 - `GET/POST/GET:id/PUT:id /api/exams` → `examController`
   - `GET /api/exams` supports `?status=`, `?exam_type=`, `?search=` (all optional, ANDed in SQL)
 - `GET/PUT /api/reports/:examId` → `reportController`
+  - `PUT` returns **403** if `exam.status === 'completed'` (report lock)
 - `GET/POST/PUT:id/DELETE:id /api/report-templates` → `reportTemplateController`
 - Data access is centralized in `src/db/queries.js`
 
@@ -47,6 +48,9 @@ The backend provides the Anapath V1 API for doctor-only workflow operations:
 - Auto-create-empty-report behavior on report update when report row is missing
 - Report templates: full CRUD at `/api/report-templates` (4 content fields + `name`)
 - Recency ordering: all exam lists ordered `created_at DESC`
+- **Report lock:** `PUT /api/reports/:examId` checks `exam.status` first — returns 403 if `completed`
+- **Auto `result_issued_date`:** `PUT /api/exams/:id` — if incoming `status = 'completed'` and exam's current `result_issued_date` is null and not provided in request, sets it to today's date
+- **Reopen clear:** `PUT /api/exams/:id` — if transitioning `completed → in_progress`, calls `clearResultIssuedDateForExam()` after the standard update to NULL out `result_issued_date`. This is a separate targeted UPDATE (COALESCE cannot set a column to NULL).
 
 ## Important Data / Update Flows
 - Create exam (`POST /api/exams`):
@@ -55,7 +59,8 @@ The backend provides the Anapath V1 API for doctor-only workflow operations:
   3. generate `exam_number` (`C####-YYYY` for cytology, `N-YYYY` for histology)
   4. insert exam + default empty report in one transaction
 - Update patient/exam (`PUT`): only editable fields accepted; read-only fields rejected with `400`
-- Reports: `PUT /api/reports/:examId` guarantees report row existence before update
+- Reports: `PUT /api/reports/:examId` checks exam status (403 if completed), then guarantees report row existence before update
+- Reopen exam: send `{ status: 'in_progress' }` to `PUT /api/exams/:id` when current status is `completed` — backend detects the transition and clears `result_issued_date`
 
 ## Known Backend Limitations
 - Auth is placeholder only:

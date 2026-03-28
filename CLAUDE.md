@@ -36,26 +36,36 @@ anapath-app/
 ├── anapath-back/         Express + PostgreSQL backend
 │   ├── server.js
 │   ├── src/app.js
-│   ├── src/routes/
-│   ├── src/controllers/
+│   ├── src/routes/       authRoutes, patientRoutes, examRoutes, reportRoutes, reportTemplateRoutes, healthRoutes
+│   ├── src/controllers/  authController, patientController, examController, reportController, reportTemplateController, healthController
 │   ├── src/db/
-│   │   ├── queries.js    All SQL data access
+│   │   ├── queries.js    All SQL data access (single file)
 │   │   ├── schema.sql
 │   │   └── seed.sql
 │   └── src/config/database.js
 └── anapath-front/        React + Vite + TypeScript frontend
     └── src/
-        ├── App.tsx               Route definitions
-        ├── components/           Shared UI (PageHeader, StatusBadge, FormField)
-        ├── context/              AuthContext
-        ├── layouts/              MainLayout + Sidebar
-        ├── pages/                Route-level page components
-        ├── routes/               ProtectedRoute
-        ├── services/             API service layer (apiClient, patientService, examService, authService, reportTemplateService)
-        ├── types/domain.ts       TypeScript domain types
+        ├── App.tsx                     Route definitions
+        ├── components/
+        │   ├── navigation/             Sidebar.tsx, NavItem.tsx
+        │   └── (shared)               PageHeader, StatusBadge, FormField, Breadcrumb, PageContainer
+        ├── context/                    AuthContext
+        ├── hooks/                      useAuth
+        ├── layouts/                    MainLayout
+        ├── pages/                      Route-level page components (see Frontend Pages table)
+        ├── routes/                     ProtectedRoute
+        ├── services/
+        │   ├── apiClient.ts            Generic authenticated HTTP client
+        │   ├── authService.ts
+        │   ├── patientService.ts
+        │   ├── examService.ts
+        │   ├── reportTemplateService.ts
+        │   ├── printSettingsStorage.ts  Print formatting prefs → localStorage
+        │   └── labSettingsStorage.ts   Lab/doctor identity → localStorage
+        ├── types/domain.ts             All TypeScript domain types
         └── utils/
-            ├── domainMappings.ts Status labels + sex display helpers
-            └── formatting.ts     formatDate(), truncate()
+            ├── domainMappings.ts       Status labels + sex display helpers
+            └── formatting.ts          formatDate(), truncate()
 ```
 
 ---
@@ -70,19 +80,20 @@ anapath-app/
 | POST | `/api/auth/login` | Placeholder credential check |
 | GET | `/api/patients` | List all patients |
 | POST | `/api/patients` | Create patient |
+| GET | `/api/patients/search` | Search by first_name, last_name, phone (up to 5 results) |
 | GET | `/api/patients/:id` | Patient detail |
 | PUT | `/api/patients/:id` | Update patient (editable fields only) |
-| GET | `/api/patients/:id/exams` | Patient's exams. Accepts `?include=report_summary` to JOIN reports and return `{ report_summary: { conclusion, updated_at } \| null }` per exam |
-| GET | `/api/exams` | All exams, `created_at DESC`. Accepts `?status=`, `?exam_type=`, `?search=` filters (all optional, all ANDed). Returns 400 with French message for invalid values. |
-| POST | `/api/exams` | Create exam (triggers `exam_sequences` transaction) |
+| GET | `/api/patients/:id/exams` | Patient's exams. Accepts `?include=report_summary` to JOIN reports |
+| GET | `/api/exams` | All exams, `created_at DESC`. Accepts `?status=`, `?exam_type=`, `?search=` filters |
+| POST | `/api/exams` | Create exam (triggers `exam_sequences` transaction, auto-creates empty report) |
 | GET | `/api/exams/:id` | Exam detail |
-| PUT | `/api/exams/:id` | Update exam (editable fields only) |
+| PUT | `/api/exams/:id` | Update exam. **Side-effects:** (1) if new status = `completed` and `result_issued_date` is null, auto-sets it to today; (2) if transitioning `completed → in_progress`, clears `result_issued_date` via `clearResultIssuedDateForExam()` |
 | GET | `/api/reports/:examId` | Exam's report |
-| PUT | `/api/reports/:examId` | Update report (auto-creates row if missing) |
-| GET | `/api/report-templates` | List all report templates |
-| POST | `/api/report-templates` | Create report template |
-| PUT | `/api/report-templates/:id` | Update report template |
-| DELETE | `/api/report-templates/:id` | Delete report template |
+| PUT | `/api/reports/:examId` | Update report. **Returns 403** if exam status is `completed`. Auto-creates report row if missing. |
+| GET | `/api/report-templates` | List all templates for lab |
+| POST | `/api/report-templates` | Create template |
+| PUT | `/api/report-templates/:id` | Update template |
+| DELETE | `/api/report-templates/:id` | Delete template |
 
 **Response envelope:** `{ success: boolean, message?: string, data: T }`
 
@@ -93,23 +104,30 @@ anapath-app/
 **`GET /api/exams` filter details:**
 - `?status=registered|in_progress|completed` — returns 400 if invalid
 - `?exam_type=histology|cytology` — returns 400 if invalid
-- `?search=<term>` — case-insensitive partial match on patient last name, first name, `exam_number`, and `sample_nature`
-- All filters are AND-combined at the SQL level in `findAllExams(filters)`
+- `?search=<term>` — ILIKE partial match on patient last name, first name, `exam_number`, `sample_nature`
+- All filters AND-combined at SQL level in `findAllExams(filters)`
+
+**Key query functions in `queries.js`:**
+- `createExamWithReport(payload)` — transactional: sequence → exam → empty report
+- `clearResultIssuedDateForExam(examId)` — sets `result_issued_date = NULL` directly (bypasses COALESCE)
+- `findExamsByPatientIdWithReportSummary(patientId)` — LEFT JOIN reports, returns `report_conclusion` + `report_updated_at`
 
 ---
 
 ## Frontend Pages
 
-| Route | Page | Purpose |
-|-------|------|---------|
+| Route | Page | Notes |
+|-------|------|-------|
 | `/login` | LoginPage | Credential form |
-| `/dashboard` | DashboardPage | **Accueil / file de travail** — status tabs + search input + exam type segmented control + exam table; click row → exam workspace |
-| `/patients` | PatientsListPage | Patient directory — text search/sex filter, inline prélèvements per row (lazy loaded), quick "+ Prélèvement" per row |
-| `/patients/new` | NewPatientPage | Create patient with duplicate detection → redirects to patient detail |
-| `/patients/:id` | PatientDetailPage | Patient info (editable) + full prélèvements history with conclusion previews |
-| `/patients/:id/exams/new` | NewExamPage | Register new prélèvement → redirects to exam workspace |
-| `/exams/:id` | ExamDetailPage | **Main case workspace** — patient card, antécédents (other exams for same patient), exam metadata edit, compte rendu (4 sections), status action buttons |
-| `/templates` | TemplatesPage | Manage report templates (create, edit, delete). Templates can be applied to fill the compte rendu sections in ExamDetailPage. |
+| `/dashboard` | DashboardPage | Accueil / file de travail — status tabs + search + exam type filter + exam table |
+| `/patients` | PatientsListPage | Patient directory — text search, sex filter, inline exam expansion per row |
+| `/patients/new` | NewPatientPage | Create patient with duplicate detection |
+| `/patients/:id` | PatientDetailPage | Patient info (editable) + exam history with conclusion previews |
+| `/patients/:id/exams/new` | NewExamPage | Register new prélèvement |
+| `/exams/:id` | ExamDetailPage | Main case workspace — metadata edit, antécédents, 4-section report, status buttons, report lock/reopen |
+| `/exams/:id/print` | ExamPrintPage | Print preview + PDF export. **No sidebar.** Opened in new tab from ExamDetailPage. |
+| `/templates` | TemplatesPage | Manage report templates (create, edit, delete, apply) |
+| `/settings` | SettingsPage | Lab/doctor identity settings (doctorName, doctorTitle, phone, email, labName, address) |
 
 ---
 
@@ -117,46 +135,58 @@ anapath-app/
 
 ```
 Patient
- └── Exams (prélèvements)    one patient → many exams
-      └── Report (compte rendu)  one exam → one report (auto-created on first PUT)
+ └── Exams (prélèvements)         one patient → many exams
+      └── Report (compte rendu)   one exam → one report (auto-created on exam creation)
 
-ReportTemplate              standalone — not linked to a patient or exam
+ReportTemplate                    standalone — not linked to patient or exam
 ```
 
 **Report fields (4 structured sections):**
-- `clinical_info` — Renseignement clinique
+- `clinical_info` — Renseignement clinique (RC)
 - `macroscopy` — Macroscopie
 - `microscopy` — Microscopie
 - `conclusion` — Conclusion
 
-**Report template fields:** same 4 sections + `name` (display label).
+**Report template fields:** same 4 sections + `name`.
 
 **Exam type values:** `histology` | `cytology` (DB/API canonical)
+
+**Report finalization model:**
+- There is **no separate report status field**. `exam.status === 'completed'` is the finalized state.
+- When an exam is `completed`, the report is locked (backend enforces 403; frontend hides save controls).
+- `result_issued_date` is auto-set to today on transition to `completed` (if null).
+- Reopen: setting status back to `in_progress` unlocks the report and clears `result_issued_date`.
 
 ---
 
 ## Key Frontend Files
 
 ### Services
-- `examService.ts` — `list(filters: ExamListFilters)`, `getById`, `create`, `update`, `updateStatus`, `getReportByExamId`, `updateReport`
+- `examService.ts` — `list(filters)`, `getById`, `create`, `update`, `updateStatus`, `getReportByExamId`, `saveReportByExamId`
   - `ExamListFilters = { status?, exam_type?, search? }` — all optional, passed as query params
-- `patientService.ts` — `list`, `getById`, `create`, `update`, `getExamsByPatientId`, `getExamsWithReportSummary`
-- `reportTemplateService.ts` — `list`, `create`, `update`, `delete`
+  - `updateStatus(id, status)` is reused for both forward transitions and reopen (`in_progress`)
+- `patientService.ts` — `list`, `getById`, `create`, `update`, `search`, `getExamsByPatientId`, `getExamsWithReportSummary`
+- `reportTemplateService.ts` — `list`, `create`, `update`, `remove`
+- `printSettingsStorage.ts` — `loadPrintSettings()`, `savePrintSettings()` — localStorage key `anapath_print_settings`
+- `labSettingsStorage.ts` — `loadLabSettings()`, `saveLabSettings()` — localStorage key `anapath_lab_settings`
 
 ### Shared Utilities
-- `utils/formatting.ts` — `formatDate(value)` (→ `dd/mm/yyyy` or `—`), `truncate(text, max)` (→ truncated with `…`)
-- `utils/domainMappings.ts` — `getStatusLabel(status)`, `displaySexFrench(value)`, `mapSexBackendToDisplay(value)`
+- `utils/formatting.ts` — `formatDate(value)` (→ `dd/mm/yyyy` or `—`), `truncate(text, max)`
+- `utils/domainMappings.ts` — `getStatusLabel(status)`, `mapExamStatusToBackend(status)`, `displaySexFrench(value)`, `mapSexBackendToDisplay(value)`
 
 ### Types (`types/domain.ts`)
-- `Patient`, `Exam`, `Report`, `ReportTemplate`
+- `Patient`, `Exam`, `Report`, `ReportTemplate`, `NewPatientInput`, `NewExamInput`, `ReportInput`
 - `ReportSummary { conclusion, updated_at }`
 - `ExamWithReportSummary` — extends `Exam` with `report_summary: ReportSummary | null`
-- `Exam` includes optional `patient_first_name?`, `patient_last_name?` (populated by `GET /api/exams` via LEFT JOIN)
+- `Exam` includes optional `patient_first_name?`, `patient_last_name?` (populated by `GET /api/exams` LEFT JOIN)
+- `PrintSettings` — `{ sectionSpacing, labelStyle, conclusionStyle, fontSize }` + `defaultPrintSettings`
+- `LabSettings` — `{ doctorName, doctorTitle, doctorPhone, doctorEmail, labName, labAddress, labPhone }` + `defaultLabSettings` (pre-filled with real lab identity — app works without any manual configuration)
 
 ### Shared Components
 - `StatusBadge` — renders colored badge from DB status value
 - `PageHeader` — title, subtitle, breadcrumbs, optional action button
 - `FormField` — label + children wrapper
+- `PageContainer` — maxWidth wrapper (`'default' | 'wide'`)
 
 ---
 
@@ -168,44 +198,73 @@ ReportTemplate              standalone — not linked to a patient or exam
 - Update patient info from patient detail (inline edit form)
 - Create prélèvement → exam workspace (redirects on save)
 - Update exam metadata from exam workspace (inline edit form)
-- Read + write 4-section compte rendu (auto-created on first save)
-- Status transitions via action buttons: Enregistré → En cours → Validé (forward only)
+- Read + write 4-section compte rendu (explicit save, no auto-save)
+- Status transitions: Enregistré → En cours → Validé
 
 ### Accueil / file de travail
 - Status filter tabs: Tous / Enregistré / En cours / Validé
 - Text search bar: patient name, exam number, sample nature (debounced 300ms, server-side ILIKE)
 - Exam type segmented control: Tous / Histologie / Cytologie (server-side)
-- All three filters are AND-combined; "✕ Effacer" resets search + type without touching the active status tab
+- All three filters AND-combined; "✕ Effacer" resets search + type without touching the active status tab
 
 ### Patient workflow
-- Patient list: inline prélèvements per row (lazy loaded, cached), sex filter, text search
+- Patient list: inline prélèvements per row (lazy loaded, cached per toggle), sex filter, text search
 - Patient detail: exams table shows conclusion preview (first 120 chars from report)
-- Duplicate detection on patient creation: warns if a patient with the same name already exists, requires explicit confirmation to proceed
+- Duplicate detection on creation: warns if same name exists, requires explicit confirmation to proceed
 
 ### Exam workspace
-- Antécédents section: shows other exams for the same patient with conclusion preview (current exam excluded)
-- 4-section compte rendu with save per section or full save
-- Status action buttons (workflow-appropriate labels, only forward transitions)
+- Antécédents section: other exams for same patient, with conclusion preview (current exam excluded)
+- 4-section compte rendu editor with explicit save
+- Status action buttons with workflow-appropriate labels
 
 ### Report templates
-- `TemplatesPage` at `/templates` (sidebar navigation)
+- `TemplatesPage` at `/templates`
 - Create, edit, delete named templates with the same 4 sections as a compte rendu
-- Templates can be applied from ExamDetailPage to prefill report sections
+- Apply from `ExamDetailPage` (confirmation required if report already has content)
+- Save current report as a new template directly from `ExamDetailPage`
+
+### Report lifecycle (validation, locking, reopen)
+- **Validation:** clicking "Valider" sets `exam.status = 'completed'`
+  - `result_issued_date` auto-set to today if null (`examController.js`)
+  - Backend: `PUT /api/reports/:examId` returns 403 from this point
+  - Frontend: all 4 report textareas disabled, save/template buttons hidden, "Rapport validé — lecture seule" banner shown
+- **Reopen:** "Rouvrir le rapport" button + confirmation dialog
+  - Sets `exam.status = 'in_progress'` via existing `updateStatus`
+  - Backend clears `result_issued_date` via `clearResultIssuedDateForExam()` (separate targeted UPDATE — bypasses COALESCE)
+  - Report becomes editable again, date will be re-set on next validation
+
+### PDF export / Aperçu PDF
+- `ExamPrintPage` at `/exams/:id/print` — opens in new tab from exam workspace, no sidebar
+- Client-side PDF generation via `html2pdf.js` (lazy-loaded), filename `CR-{exam_number}.pdf`
+- Print settings panel (collapsible): sectionSpacing, labelStyle, conclusionStyle, fontSize — persisted in localStorage
+- Document structure: entête → exam block → report sections → signature footer
+- Header: tries `/entete-compte-rendu.png` from `/public` first; falls back to configured text identity
+
+### Lab/doctor settings
+- `SettingsPage` at `/settings` (4th item in sidebar)
+- Fields: doctorName, doctorTitle (multiline), doctorPhone, doctorEmail, labName, labAddress (multiline), labPhone
+- Persisted in localStorage (`anapath_lab_settings`) — not backed by DB/API
+- Default values = real lab identity, so app works immediately without configuration
+- `ExamPrintPage` loads these at mount and injects them into the text fallback header and signature footer
+- Includes explanatory note: if `/entete-compte-rendu.png` is present, it overrides the text fallback
 
 ---
 
 ## Known Limitations / Intentionally Deferred
 
-- **Auth is placeholder:** plaintext password check, no JWT signing/verification, no route-level authorization middleware
+- **Auth is placeholder:** plaintext password comparison, mock token string, no JWT middleware, no route-level authorization
 - **No RBAC** — single doctor/admin workflow only
-- **No pagination** — all lists load in full; defer until data volume is an issue
-- **No PDF export** — not in scope for V1
-- **No automated test suite** — manual regression testing only
-- **No CIN field** — requires schema migration, deferred
-- **No urgency flag** — nice-to-have, deferred
-- **No date range filter on Accueil** — no date picker component exists yet; deferred
+- **No pagination** — all lists load in full; deferred until data volume requires it
+- **PDF is client-side only** — `html2pdf.js` in the browser. No server-side rendering, no cryptographic/official signature on the document.
+- **Lab settings are localStorage-only** — not synced across devices. If localStorage is cleared, settings reset to defaults (which are the real lab defaults).
+- **No report audit trail** — reopen works but leaves no trace beyond `updated_at` timestamps. No version history, no recovery of overwritten text.
+- **No CIN field on patients** — requires schema migration; deferred
+- **No urgency flag on exams** — nice-to-have; deferred
+- **No date range filter on Accueil** — no date picker component; deferred
 - **No URL-based filter persistence** — Accueil filters reset on page reload; deferred
-- **Status transitions are forward-only** — no undo/reverse button exists or is planned for V1
+- **`diagnosis_keywords`** — stored as `TEXT[]` in DB, accepted in create/update, shown in edit mode — but never displayed as tags and never filterable from the dashboard
+- **`birth_date`** — stored in DB, returned by API, but never displayed in any UI page or on the printed PDF
+- **Multi-tenancy** — `laboratories` table supports it; backend hardcodes `laboratory_id = 1` everywhere
 
 ---
 
@@ -223,8 +282,8 @@ ReportTemplate              standalone — not linked to a patient or exam
 ## Working Norms for Future Claude Sessions
 
 **Before making changes:**
-- Read root `CLAUDE.md` first. Then inspect both frontend and backend files relevant to the task before proposing changes.
-- Do not assume the codebase matches older CLAUDE.md state — verify by reading the actual files.
+- Read root `CLAUDE.md` first. Then inspect the actual files relevant to the task before proposing changes.
+- Do not assume the codebase matches this CLAUDE.md state — verify by reading the actual files.
 - Do not silently fake or stub backend features in the frontend. If a backend capability doesn't exist, either build it or surface the limitation.
 
 **When making changes:**
@@ -239,9 +298,9 @@ ReportTemplate              standalone — not linked to a patient or exam
 - After frontend changes: `cd anapath-front && npx tsc --noEmit`.
 
 **Style and scope:**
-- Breadcrumbs on every non-root page via `PageHeader`.
+- Breadcrumbs on every non-root page via `PageHeader`. Exception: `ExamPrintPage` has no sidebar or breadcrumbs (it's a standalone print view).
 - Favor workflow clarity over cosmetic polish. If it doesn't improve a real doctor task, it's out of scope.
-- Avoid feature bloat. Consult the "Intentionally Deferred" list before proposing additions.
+- Avoid feature bloat. Consult the "Known Limitations / Intentionally Deferred" list before proposing additions.
 
 ---
 

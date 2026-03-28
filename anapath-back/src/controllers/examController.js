@@ -3,6 +3,7 @@ import {
   findExamById,
   createExamWithReport,
   updateExamById,
+  clearResultIssuedDateForExam,
 } from '../db/queries.js';
 
 function validateExamPayload(payload) {
@@ -161,7 +162,21 @@ export async function updateExam(req, res, next) {
       });
     }
 
-    const updatedExam = await updateExamById(examId, updatePayload);
+    // Auto-set result_issued_date when transitioning to completed, if not already set
+    if (
+      updatePayload.status === 'completed' &&
+      !exam.result_issued_date &&
+      !updatePayload.result_issued_date
+    ) {
+      updatePayload.result_issued_date = new Date().toISOString().slice(0, 10);
+    }
+
+    let updatedExam = await updateExamById(examId, updatePayload);
+
+    // On reopen: clear result_issued_date only when transitioning completed → in_progress
+    if (updatePayload.status === 'in_progress' && exam.status === 'completed') {
+      updatedExam = await clearResultIssuedDateForExam(examId);
+    }
 
     return res.status(200).json({
       success: true,

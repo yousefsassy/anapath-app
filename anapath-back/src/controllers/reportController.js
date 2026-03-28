@@ -34,6 +34,13 @@ export async function updateReportByExamId(req, res, next) {
       return res.status(404).json({ success: false, message: 'Exam not found' });
     }
 
+    if (exam.status === 'completed') {
+      return res.status(403).json({
+        success: false,
+        message: 'Ce compte rendu est verrouillé. Le prélèvement a été validé.',
+      });
+    }
+
     let report = await findReportByExamId(examId);
     if (!report) {
       await createEmptyReportForExamId(examId);

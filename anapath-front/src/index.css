@@ -867,8 +867,65 @@ td {
   border-color: #cfe1e9;
 }
 
+.report-locked-banner-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: 4px;
+}
+
+.report-locked-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: #e8f4f8;
+  border: 1px solid #c0dde8;
+  color: var(--primary-strong);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
 .exam-detail-report-editor-panel .form-section-header p {
   max-width: 72ch;
+}
+
+/* ── Settings page ─────────────────────────────────────────────────────── */
+
+.settings-note {
+  margin-top: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.settings-note p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.settings-note code {
+  font-family: monospace;
+  background: var(--border);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+
+.settings-actions {
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.settings-reset-label {
+  font-size: 0.875rem;
+  color: var(--muted);
+  align-self: center;
 }
 
 .exam-detail-feedback {

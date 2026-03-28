@@ -97,6 +97,7 @@ export function ExamDetailPage() {
 
   const [isStatusUpdating, setIsStatusUpdating] = useState(false)
   const [statusError, setStatusError] = useState('')
+  const [isReopenConfirmOpen, setIsReopenConfirmOpen] = useState(false)
 
   // Templates
   const [templates, setTemplates] = useState<ReportTemplate[]>([])
@@ -321,6 +322,27 @@ export function ExamDetailPage() {
     }
   }
 
+  // Reopen report ------------------------------------------------------------
+  const onConfirmReopen = async () => {
+    if (isStatusUpdating || !exam) return
+    setStatusError('')
+    setIsStatusUpdating(true)
+    setIsReopenConfirmOpen(false)
+    try {
+      const updated = await examService.updateStatus(id, 'in_progress')
+      if (updated) {
+        setExam(updated)
+        setExamForm(toExamEditForm(updated))
+      }
+    } catch (err) {
+      setStatusError(
+        err instanceof Error ? err.message : 'Impossible de rouvrir le rapport.'
+      )
+    } finally {
+      setIsStatusUpdating(false)
+    }
+  }
+
   // Save report --------------------------------------------------------------
   const onSubmitReport = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -378,6 +400,7 @@ export function ExamDetailPage() {
 
   const statusAction = STATUS_NEXT[exam.status]
   const currentStatus = mapExamStatusToBackend(exam.status)
+  const isReportLocked = currentStatus === 'completed'
 
   return (
     <PageContainer maxWidth="wide">
@@ -631,16 +654,52 @@ export function ExamDetailPage() {
         <div className="panel-header">
           <div>
             <h2>Compte Rendu</h2>
-            <p>
-              {currentStatus === 'completed'
-                ? 'Ce prélèvement est validé.'
-                : 'Rédigez le compte rendu structuré pour ce prélèvement.'}
-            </p>
+            {isReportLocked ? (
+              <div className="report-locked-banner-row">
+                <div className="report-locked-banner">
+                  Rapport validé — lecture seule
+                </div>
+                <button
+                  type="button"
+                  className="button tertiary"
+                  onClick={() => setIsReopenConfirmOpen(true)}
+                  disabled={isStatusUpdating}
+                >
+                  Rouvrir le rapport
+                </button>
+              </div>
+            ) : (
+              <p>Rédigez le compte rendu structuré pour ce prélèvement.</p>
+            )}
           </div>
         </div>
 
         <form className="form-layout report-form-layout" onSubmit={onSubmitReport}>
-          {templates.length > 0 && (
+          {isReopenConfirmOpen && (
+            <div className="template-confirm-banner">
+              <span>Rouvrir ce rapport le rendra à nouveau modifiable et effacera la date d'émission du résultat.</span>
+              <div className="template-confirm-actions">
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => void onConfirmReopen()}
+                  disabled={isStatusUpdating}
+                >
+                  Confirmer
+                </button>
+                <button
+                  type="button"
+                  className="button tertiary"
+                  onClick={() => setIsReopenConfirmOpen(false)}
+                  disabled={isStatusUpdating}
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          )}
+
+          {templates.length > 0 && !isReportLocked && (
             <div className="template-picker-row">
               <select
                 value=""
@@ -683,7 +742,7 @@ export function ExamDetailPage() {
                 id="clinical_info"
                 rows={4}
                 value={report.clinical_info}
-                disabled={isReportLoading || isSubmitting}
+                disabled={isReportLoading || isSubmitting || isReportLocked}
                 onChange={(e) => setReport({ ...report, clinical_info: e.target.value })}
               />
             </FormField>
@@ -693,7 +752,7 @@ export function ExamDetailPage() {
                 id="macroscopy"
                 rows={4}
                 value={report.macroscopy}
-                disabled={isReportLoading || isSubmitting}
+                disabled={isReportLoading || isSubmitting || isReportLocked}
                 onChange={(e) => setReport({ ...report, macroscopy: e.target.value })}
               />
             </FormField>
@@ -703,7 +762,7 @@ export function ExamDetailPage() {
                 id="microscopy"
                 rows={5}
                 value={report.microscopy}
-                disabled={isReportLoading || isSubmitting}
+                disabled={isReportLoading || isSubmitting || isReportLocked}
                 onChange={(e) => setReport({ ...report, microscopy: e.target.value })}
               />
             </FormField>
@@ -713,7 +772,7 @@ export function ExamDetailPage() {
                 id="conclusion"
                 rows={4}
                 value={report.conclusion}
-                disabled={isReportLoading || isSubmitting}
+                disabled={isReportLoading || isSubmitting || isReportLocked}
                 onChange={(e) => setReport({ ...report, conclusion: e.target.value })}
               />
             </FormField>
@@ -726,7 +785,7 @@ export function ExamDetailPage() {
             {saveAsTemplateInfo ? <p className="success-message">{saveAsTemplateInfo}</p> : null}
           </div>
 
-          {saveAsTemplateOpen && (
+          {saveAsTemplateOpen && !isReportLocked && (
             <div className="save-as-template-row">
               <input
                 type="text"
@@ -757,23 +816,25 @@ export function ExamDetailPage() {
             </div>
           )}
 
-          <div className="form-actions form-actions-sticky">
-            <button
-              type="button"
-              className="button tertiary"
-              disabled={isReportLoading || isSubmitting}
-              onClick={() => { setSaveAsTemplateOpen((v) => !v); setSaveAsTemplateError(''); setSaveAsTemplateInfo('') }}
-            >
-              Sauvegarder comme modèle
-            </button>
-            <button
-              type="submit"
-              className="button"
-              disabled={isReportLoading || isSubmitting}
-            >
-              {isSubmitting ? 'Enregistrement…' : 'Enregistrer le compte rendu'}
-            </button>
-          </div>
+          {!isReportLocked && (
+            <div className="form-actions form-actions-sticky">
+              <button
+                type="button"
+                className="button tertiary"
+                disabled={isReportLoading || isSubmitting}
+                onClick={() => { setSaveAsTemplateOpen((v) => !v); setSaveAsTemplateError(''); setSaveAsTemplateInfo('') }}
+              >
+                Sauvegarder comme modèle
+              </button>
+              <button
+                type="submit"
+                className="button"
+                disabled={isReportLoading || isSubmitting}
+              >
+                {isSubmitting ? 'Enregistrement…' : 'Enregistrer le compte rendu'}
+              </button>
+            </div>
+          )}
         </form>
       </section>
     </PageContainer>

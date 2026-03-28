@@ -181,6 +181,14 @@ export async function updateExamById(examId, payload) {
   return result.rows[0] || null;
 }
 
+export async function clearResultIssuedDateForExam(examId) {
+  const result = await query(
+    'UPDATE exams SET result_issued_date = NULL, updated_at = NOW() WHERE id = $1 RETURNING *',
+    [examId]
+  );
+  return result.rows[0] ?? null;
+}
+
 function formatExamNumber(examType, sequenceValue, year) {
   if (examType === 'cytology') {
     return `C${String(sequenceValue).padStart(4, '0')}-${year}`;

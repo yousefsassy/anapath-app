@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { examService } from '../services/examService'
 import { patientService } from '../services/patientService'
+import { loadLabSettings } from '../services/labSettingsStorage'
 import { loadPrintSettings, savePrintSettings } from '../services/printSettingsStorage'
-import type { Exam, Patient, PrintSettings, ReportInput } from '../types/domain'
+import type { Exam, LabSettings, Patient, PrintSettings, ReportInput } from '../types/domain'
 import { defaultPrintSettings } from '../types/domain'
 import { formatDate } from '../utils/formatting'
 
@@ -44,6 +45,7 @@ export function ExamPrintPage() {
   const [isDownloading, setIsDownloading] = useState(false)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [printSettings, setPrintSettings] = useState<PrintSettings>(() => loadPrintSettings())
+  const [labSettings] = useState<LabSettings>(() => loadLabSettings())
 
   useEffect(() => {
     const load = async () => {
@@ -256,17 +258,19 @@ export function ExamPrintPage() {
           ) : (
             <div className="print-entete-fallback">
               <div className="print-entete-left">
-                <p className="print-entete-doctor">DOCTEUR SAMIA HANNACHI SASSI</p>
-                <p>Ancienne Assistante Hospitalo-Universitaire</p>
-                <p>Institut Salah Azaiez</p>
-                <p>Tél :(+216) 98 315 221 - (+216) 24 315 221</p>
-                <p>Email : anapath.labo@gmail.com</p>
+                <p className="print-entete-doctor">{labSettings.doctorName}</p>
+                {labSettings.doctorTitle.split('\n').filter(Boolean).map((line, i) => (
+                  <p key={i}>{line}</p>
+                ))}
+                {labSettings.doctorPhone && <p>Tél : {labSettings.doctorPhone}</p>}
+                {labSettings.doctorEmail && <p>Email : {labSettings.doctorEmail}</p>}
               </div>
               <div className="print-entete-right">
-                <p className="print-entete-lab">LABORATOIRE D'ANATOMIE ET CYTOLOGIE PATHOLOGIQUES</p>
-                <p>Immeuble Nour City, Bloc A, 2ème étage Appt. A2-1,</p>
-                <p>Centre Urbain Nord, 1003 Tunis</p>
-                <p>Tél : (+216) 36 28 28 61</p>
+                <p className="print-entete-lab">{labSettings.labName}</p>
+                {labSettings.labAddress.split('\n').filter(Boolean).map((line, i) => (
+                  <p key={i}>{line}</p>
+                ))}
+                {labSettings.labPhone && <p>Tél : {labSettings.labPhone}</p>}
               </div>
             </div>
           )}
@@ -363,7 +367,7 @@ export function ExamPrintPage() {
 
         {/* ── SIGNATURE ──────────────────────────────────────────── */}
         <footer className="print-signature-area">
-          <p>Docteur Samia Hannachi Sassi</p>
+          <p>{labSettings.doctorName}</p>
           <p className="print-signature-text">Signature électronique</p>
         </footer>
 
