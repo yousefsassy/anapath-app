@@ -1,4 +1,4 @@
-import type { Exam, ExamStatus, NewExamInput, ReportInput } from '../types/domain'
+import type { Exam, ExamStats, ExamStatus, NewExamInput, ReportInput } from '../types/domain'
 import { apiClient } from './apiClient'
 import { authService } from './authService'
 import { mapExamStatusToBackend } from '../utils/domainMappings'
@@ -16,6 +16,7 @@ interface CreateExamPayload {
   exam_history: string
   diagnosis_keywords: string[]
   status: 'registered' | 'in_progress' | 'completed'
+  urgent: boolean
 }
 
 interface UpdateExamPayload {
@@ -29,6 +30,7 @@ interface UpdateExamPayload {
   exam_history?: string
   diagnosis_keywords?: string[]
   status?: 'registered' | 'in_progress' | 'completed'
+  urgent?: boolean
 }
 
 export interface UpdateExamInput {
@@ -42,6 +44,7 @@ export interface UpdateExamInput {
   exam_history: string
   diagnosis_keywords: string
   status: ExamStatus
+  urgent: boolean
 }
 
 const toNullableDate = (value: string) => (value.trim() ? value : null)
@@ -65,14 +68,22 @@ export interface ExamListFilters {
   status?: 'registered' | 'in_progress' | 'completed'
   exam_type?: 'histology' | 'cytology'
   search?: string
+  date_from?: string  // YYYY-MM-DD
+  date_to?: string    // YYYY-MM-DD
 }
 
 export const examService = {
+  getStats: async (): Promise<ExamStats> => {
+    return apiClient.get<ExamStats>('/exams/stats')
+  },
+
   list: async (filters: ExamListFilters = {}): Promise<Exam[]> => {
     const params = new URLSearchParams()
     if (filters.status) params.set('status', filters.status)
     if (filters.exam_type) params.set('exam_type', filters.exam_type)
     if (filters.search?.trim()) params.set('search', filters.search.trim())
+    if (filters.date_from) params.set('date_from', filters.date_from)
+    if (filters.date_to) params.set('date_to', filters.date_to)
     const qs = params.toString()
     return apiClient.get<Exam[]>(qs ? `/exams?${qs}` : '/exams')
   },
@@ -126,6 +137,7 @@ export const examService = {
       exam_history: payload.exam_history,
       diagnosis_keywords: toDiagnosisKeywordsArray(payload.diagnosis_keywords),
       status: mapExamStatusToBackend(payload.status),
+      urgent: payload.urgent,
     }
 
     return apiClient.post<Exam>('/exams', requestBody)
@@ -144,6 +156,7 @@ export const examService = {
         exam_history: payload.exam_history,
         diagnosis_keywords: toDiagnosisKeywordsArray(payload.diagnosis_keywords),
         status: mapExamStatusToBackend(payload.status),
+        urgent: payload.urgent,
       }
 
       return await apiClient.put<Exam>(`/exams/${id}`, requestBody)

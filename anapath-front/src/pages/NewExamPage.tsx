@@ -18,6 +18,7 @@ const initialFormState: Omit<NewExamInput, 'patient_id'> = {
   exam_history: '',
   diagnosis_keywords: '',
   status: 'registered',
+  urgent: false,
 }
 
 export function NewExamPage() {
@@ -132,6 +133,18 @@ export function NewExamPage() {
                   value={form.clinic_name}
                   onChange={(e) => setForm({ ...form, clinic_name: e.target.value })}
                 />
+              </FormField>
+
+              <FormField label="Priorité" htmlFor="urgent">
+                <label className="checkbox-label">
+                  <input
+                    id="urgent"
+                    type="checkbox"
+                    checked={form.urgent}
+                    onChange={(e) => setForm({ ...form, urgent: e.target.checked })}
+                  />
+                  Prélèvement urgent
+                </label>
               </FormField>
             </div>
           </section>

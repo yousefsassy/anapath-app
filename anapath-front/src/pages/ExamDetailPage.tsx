@@ -41,6 +41,7 @@ function toExamEditForm(exam: Exam): UpdateExamInput {
     exam_history: exam.exam_history ?? '',
     diagnosis_keywords: toDiagnosisKeywordsString(exam.diagnosis_keywords),
     status: mapExamStatusToBackend(exam.status),
+    urgent: exam.urgent ?? false,
   }
 }
 
@@ -62,6 +63,7 @@ const emptyExamForm: UpdateExamInput = {
   exam_history: '',
   diagnosis_keywords: '',
   status: 'registered',
+  urgent: false,
 }
 
 // ── status action config ──────────────────────────────────────────────────────
@@ -491,6 +493,19 @@ export function ExamDetailPage() {
                   </select>
                 </FormField>
 
+                <FormField label="Priorité" htmlFor="urgent_edit">
+                  <label className="checkbox-label">
+                    <input
+                      id="urgent_edit"
+                      type="checkbox"
+                      checked={examForm.urgent}
+                      onChange={(e) => setExamForm({ ...examForm, urgent: e.target.checked })}
+                      disabled={isExamSubmitting}
+                    />
+                    Prélèvement urgent
+                  </label>
+                </FormField>
+
                 <FormField label="Demandé par" htmlFor="requesting_doctor">
                   <input
                     id="requesting_doctor"
@@ -579,6 +594,10 @@ export function ExamDetailPage() {
               <div className="exam-detail-meta-item">
                 <dt>Type d'examen</dt>
                 <dd>{exam.exam_type === 'histology' ? 'Histologie' : exam.exam_type === 'cytology' ? 'Cytologie' : exam.exam_type || '—'}</dd>
+              </div>
+              <div className="exam-detail-meta-item">
+                <dt>Priorité</dt>
+                <dd>{exam.urgent ? <span className="badge--urgent">Urgent</span> : '—'}</dd>
               </div>
               <div className="exam-detail-meta-item">
                 <dt>Demandé par</dt>

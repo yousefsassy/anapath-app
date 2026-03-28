@@ -4,6 +4,7 @@ import {
   createExamWithReport,
   updateExamById,
   clearResultIssuedDateForExam,
+  getExamStats,
 } from '../db/queries.js';
 
 function validateExamPayload(payload) {
@@ -24,6 +25,22 @@ function validateExamPayload(payload) {
 const VALID_STATUSES = ['registered', 'in_progress', 'completed'];
 const VALID_EXAM_TYPES = ['histology', 'cytology'];
 
+export async function getStats(req, res, next) {
+  try {
+    const raw = await getExamStats(1);
+    return res.json({
+      success: true,
+      data: {
+        registered_count:     parseInt(raw.registered_count, 10),
+        in_progress_count:    parseInt(raw.in_progress_count, 10),
+        completed_this_month: parseInt(raw.completed_this_month, 10),
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function getExams(req, res, next) {
   try {
     if (req.query.status && !VALID_STATUSES.includes(req.query.status)) {
@@ -38,10 +55,31 @@ export async function getExams(req, res, next) {
         message: `Type d'examen invalide. Valeurs acceptées : ${VALID_EXAM_TYPES.join(', ')}`,
       });
     }
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    if (req.query.date_from && !DATE_RE.test(req.query.date_from)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Format de date invalide. Utilisez YYYY-MM-DD.',
+      });
+    }
+    if (req.query.date_to && !DATE_RE.test(req.query.date_to)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Format de date invalide. Utilisez YYYY-MM-DD.',
+      });
+    }
+    if (req.query.date_from && req.query.date_to && req.query.date_from > req.query.date_to) {
+      return res.status(400).json({
+        success: false,
+        message: 'La date de début doit être antérieure ou égale à la date de fin.',
+      });
+    }
     const filters = {
       ...(req.query.status ? { status: req.query.status } : {}),
       ...(req.query.exam_type ? { exam_type: req.query.exam_type } : {}),
       ...(req.query.search?.trim() ? { search: req.query.search.trim() } : {}),
+      ...(req.query.date_from ? { date_from: req.query.date_from } : {}),
+      ...(req.query.date_to ? { date_to: req.query.date_to } : {}),
     };
     const exams = await findAllExams(filters);
     return res.status(200).json({ success: true, data: exams });
@@ -72,6 +110,7 @@ export async function createExam(req, res, next) {
         ? req.body.diagnosis_keywords
         : [],
       status: req.body.status || 'registered',
+      urgent: toBoolean(req.body.urgent),
     });
 
     if (result.error === 'PATIENT_NOT_FOUND') {
@@ -117,7 +156,14 @@ const EDITABLE_FIELDS = [
   'exam_history',
   'diagnosis_keywords',
   'status',
+  'urgent',
 ];
+
+// Robustly coerce a request body value to boolean.
+// Accepts true, 1, 'true', '1' as true; everything else as false.
+function toBoolean(value) {
+  return value === true || value === 1 || value === 'true' || value === '1';
+}
 
 const READ_ONLY_FIELDS = [
   'id',
@@ -160,6 +206,10 @@ export async function updateExam(req, res, next) {
         success: false,
         message: 'No editable fields provided for update',
       });
+    }
+
+    if ('urgent' in updatePayload) {
+      updatePayload.urgent = toBoolean(updatePayload.urgent);
     }
 
     // Auto-set result_issued_date when transitioning to completed, if not already set

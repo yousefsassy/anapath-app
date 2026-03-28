@@ -7,6 +7,7 @@ import { loadPrintSettings, savePrintSettings } from '../services/printSettingsS
 import type { Exam, LabSettings, Patient, PrintSettings, ReportInput } from '../types/domain'
 import { defaultPrintSettings } from '../types/domain'
 import { formatDate } from '../utils/formatting'
+import { displaySexFrench } from '../utils/domainMappings'
 
 const emptyReport: ReportInput = {
   clinical_info: '',
@@ -298,6 +299,10 @@ export function ExamPrintPage() {
                 <span className="print-meta-label">Résultat émis le :</span>{' '}
                 {formatDate(exam.result_issued_date)}
               </p>
+              <p>
+                <span className="print-meta-label">Type :</span>{' '}
+                {exam.exam_type === 'histology' ? 'Histologie' : exam.exam_type === 'cytology' ? 'Cytologie' : '—'}
+              </p>
             </div>
             <div className="print-meta-right">
               <p>
@@ -307,6 +312,10 @@ export function ExamPrintPage() {
               <p>
                 <span className="print-meta-label">Age :</span>{' '}
                 {patient?.age ?? '—'}
+              </p>
+              <p>
+                <span className="print-meta-label">Sexe :</span>{' '}
+                {patient?.sex ? displaySexFrench(patient.sex) : '—'}
               </p>
               <p>
                 <strong>
@@ -320,6 +329,13 @@ export function ExamPrintPage() {
               </p>
             </div>
           </div>
+
+          {exam.exam_history?.trim() ? (
+            <p className="print-exam-history">
+              <span className="print-meta-label">Contexte clinique :</span>{' '}
+              {exam.exam_history}
+            </p>
+          ) : null}
         </section>
 
         <hr className="print-separator" />

@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS exams (
   exam_history TEXT,
   diagnosis_keywords TEXT[] NOT NULL DEFAULT '{}',
   status VARCHAR(50) NOT NULL DEFAULT 'registered',
+  urgent BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

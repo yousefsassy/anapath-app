@@ -50,6 +50,7 @@ export interface Exam {
   exam_history: string
   diagnosis_keywords: string[] | string
   status: ExamStatus
+  urgent: boolean
   report?: Report
   created_at: string
   updated_at: string
@@ -80,6 +81,7 @@ export interface NewExamInput {
   exam_history: string
   diagnosis_keywords: string
   status: ExamStatus
+  urgent: boolean
 }
 
 export type ReportInput = Report
@@ -127,6 +129,12 @@ export interface LabSettings {
   labName: string
   labAddress: string   // newline-separated lines
   labPhone: string
+}
+
+export interface ExamStats {
+  registered_count: number
+  in_progress_count: number
+  completed_this_month: number
 }
 
 export const defaultLabSettings: LabSettings = {

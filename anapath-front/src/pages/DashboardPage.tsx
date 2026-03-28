@@ -4,7 +4,7 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { PageContainer } from '../layouts/PageContainer'
 import { examService } from '../services/examService'
-import type { Exam } from '../types/domain'
+import type { Exam, ExamStats } from '../types/domain'
 import { formatDate } from '../utils/formatting'
 
 type StatusFilter = 'all' | 'registered' | 'in_progress' | 'completed'
@@ -26,12 +26,19 @@ const EXAM_TYPE_BUTTONS: { value: ExamTypeFilter; label: string }[] = [
 export function DashboardPage() {
   const navigate = useNavigate()
   const [exams, setExams] = useState<Exam[]>([])
+  const [stats, setStats] = useState<ExamStats | null>(null)
   const [activeFilter, setActiveFilter] = useState<StatusFilter>('all')
   const [examTypeFilter, setExamTypeFilter] = useState<ExamTypeFilter>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    examService.getStats().then(setStats).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300)
@@ -47,6 +54,8 @@ export function DashboardPage() {
           status: activeFilter === 'all' ? undefined : activeFilter,
           exam_type: examTypeFilter === 'all' ? undefined : examTypeFilter,
           search: debouncedSearch.trim() || undefined,
+          ...(dateFrom ? { date_from: dateFrom } : {}),
+          ...(dateTo ? { date_to: dateTo } : {}),
         })
         setExams(data)
       } catch {
@@ -57,13 +66,15 @@ export function DashboardPage() {
     }
 
     void loadExams()
-  }, [activeFilter, examTypeFilter, debouncedSearch])
+  }, [activeFilter, examTypeFilter, debouncedSearch, dateFrom, dateTo])
 
-  const hasActiveFilters = searchTerm !== '' || examTypeFilter !== 'all'
+  const hasActiveFilters = searchTerm !== '' || examTypeFilter !== 'all' || dateFrom !== '' || dateTo !== ''
 
   const clearFilters = () => {
     setSearchTerm('')
     setExamTypeFilter('all')
+    setDateFrom('')
+    setDateTo('')
   }
 
   return (
@@ -77,6 +88,24 @@ export function DashboardPage() {
           </Link>
         }
       />
+
+      <div className="stats-grid">
+        <div className="dashboard-stat-card">
+          <div className="dashboard-stat-head">Enregistrés</div>
+          <strong>{stats ? stats.registered_count : '—'}</strong>
+          <p>En attente de traitement</p>
+        </div>
+        <div className="dashboard-stat-card">
+          <div className="dashboard-stat-head">En cours</div>
+          <strong>{stats ? stats.in_progress_count : '—'}</strong>
+          <p>Analyses en cours</p>
+        </div>
+        <div className="dashboard-stat-card dashboard-stat-card--highlight">
+          <div className="dashboard-stat-head">Validés ce mois</div>
+          <strong>{stats ? stats.completed_this_month : '—'}</strong>
+          <p>Comptes rendus émis en {new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</p>
+        </div>
+      </div>
 
       <section className="panel">
         <div className="accueil-filter-tabs">
@@ -105,6 +134,29 @@ export function DashboardPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+
+          <div className="accueil-date-range">
+            <label className="accueil-date-label">
+              Du
+              <input
+                type="date"
+                className="accueil-date-input"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={(e) => setDateFrom(e.target.value)}
+              />
+            </label>
+            <label className="accueil-date-label">
+              Au
+              <input
+                type="date"
+                className="accueil-date-input"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(e) => setDateTo(e.target.value)}
+              />
+            </label>
           </div>
 
           <div className="accueil-type-segmented">
@@ -174,7 +226,10 @@ export function DashboardPage() {
                     onClick={() => navigate(`/exams/${exam.id}`)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <td className="accueil-ref">{exam.exam_number}</td>
+                    <td className="accueil-ref">
+                      {exam.urgent && <span className="badge--urgent">Urgent</span>}{' '}
+                      {exam.exam_number}
+                    </td>
                     <td>
                       {exam.patient_last_name && exam.patient_first_name
                         ? `${exam.patient_last_name} ${exam.patient_first_name}`

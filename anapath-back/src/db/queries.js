@@ -133,9 +133,19 @@ export async function findAllExams(filters = {}) {
     )`);
   }
 
+  if (filters.date_from) {
+    params.push(filters.date_from);
+    conditions.push(`e.registered_date >= $${params.length}`);
+  }
+
+  if (filters.date_to) {
+    params.push(filters.date_to);
+    conditions.push(`e.registered_date <= $${params.length}`);
+  }
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const result = await query(
-    `${baseQuery} ${whereClause} ORDER BY e.created_at DESC`,
+    `${baseQuery} ${whereClause} ORDER BY e.urgent DESC, e.created_at DESC`,
     params
   );
   return result.rows;
@@ -160,6 +170,7 @@ export async function updateExamById(examId, payload) {
        exam_history = COALESCE($9, exam_history),
        diagnosis_keywords = COALESCE($10, diagnosis_keywords),
        status = COALESCE($11, status),
+       urgent = COALESCE($12, urgent),
        updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
@@ -175,6 +186,7 @@ export async function updateExamById(examId, payload) {
       payload.exam_history,
       payload.diagnosis_keywords,
       payload.status,
+      payload.urgent ?? null,
     ]
   );
 
@@ -239,8 +251,9 @@ export async function createExamWithReport(payload) {
         sample_nature,
         exam_history,
         diagnosis_keywords,
-        status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        status,
+        urgent
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *`,
       [
         payload.laboratory_id,
@@ -256,6 +269,7 @@ export async function createExamWithReport(payload) {
         payload.exam_history,
         payload.diagnosis_keywords,
         payload.status,
+        payload.urgent === true,
       ]
     );
 
@@ -372,6 +386,23 @@ export async function deleteTemplateById(templateId) {
     [templateId]
   );
   return result.rows[0] || null;
+}
+
+export async function getExamStats(laboratoryId) {
+  const result = await query(
+    `SELECT
+       COUNT(*) FILTER (WHERE status = 'registered')  AS registered_count,
+       COUNT(*) FILTER (WHERE status = 'in_progress') AS in_progress_count,
+       COUNT(*) FILTER (
+         WHERE status = 'completed'
+           AND result_issued_date >= date_trunc('month', CURRENT_DATE)
+           AND result_issued_date <  date_trunc('month', CURRENT_DATE) + interval '1 month'
+       ) AS completed_this_month
+     FROM exams
+     WHERE laboratory_id = $1`,
+    [laboratoryId]
+  );
+  return result.rows[0];
 }
 
 export async function findUserByEmail(email) {

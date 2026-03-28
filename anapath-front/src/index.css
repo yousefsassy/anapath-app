@@ -1062,6 +1062,31 @@ td {
   color: #555;
 }
 
+/* Urgency badge */
+.badge--urgent {
+  display: inline-block;
+  background-color: #dc2626;
+  color: #fff;
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  vertical-align: middle;
+  line-height: 1.4;
+}
+
+/* Checkbox label layout */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 6px 0;
+}
+
 /* Accueil work queue */
 .accueil-filter-tabs {
   display: flex;
@@ -1193,6 +1218,38 @@ td {
 .accueil-clear-btn:hover {
   color: var(--text);
   background: var(--surface-soft);
+}
+
+.accueil-date-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.accueil-date-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.accueil-date-input {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.accueil-date-input:focus {
+  outline: none;
+  border-color: var(--primary);
 }
 
 /* Exam detail: status action buttons */

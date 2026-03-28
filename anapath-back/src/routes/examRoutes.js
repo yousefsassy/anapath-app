@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { getExams, createExam, getExamById, updateExam } from '../controllers/examController.js';
+import { getExams, getStats, createExam, getExamById, updateExam } from '../controllers/examController.js';
 
 const router = Router();
 
+router.get('/stats', getStats);
 router.get('/', getExams);
 router.post('/', createExam);
 router.get('/:id', getExamById);
