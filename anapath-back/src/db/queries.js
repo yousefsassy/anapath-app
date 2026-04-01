@@ -13,13 +13,22 @@ const reportArchiveSearchVectorSql = `
   setweight(to_tsvector('simple', coalesce(r.conclusion, '')), 'A')
 `;
 
-export async function findAllPatients() {
-  const result = await query('SELECT * FROM patients ORDER BY id ASC');
+export async function findAllPatients(laboratoryId) {
+  const result = await query(
+    `SELECT *
+     FROM patients
+     WHERE laboratory_id = $1
+     ORDER BY LOWER(last_name) ASC, LOWER(first_name) ASC, id ASC`,
+    [laboratoryId]
+  );
   return result.rows;
 }
 
-export async function findPatientById(patientId) {
-  const result = await query('SELECT * FROM patients WHERE id = $1', [patientId]);
+export async function findPatientById(patientId, laboratoryId) {
+  const result = await query(
+    'SELECT * FROM patients WHERE id = $1 AND laboratory_id = $2',
+    [patientId, laboratoryId]
+  );
   return result.rows[0] || null;
 }
 
@@ -87,22 +96,26 @@ export async function searchPatientsByName(labId, firstName, lastName, phone = '
   return result.rows;
 }
 
-export async function findExamsByPatientId(patientId) {
+export async function findExamsByPatientId(patientId, laboratoryId) {
   const result = await query(
-    'SELECT * FROM exams WHERE patient_id = $1 ORDER BY created_at DESC',
-    [patientId]
+    `SELECT *
+     FROM exams
+     WHERE patient_id = $1 AND laboratory_id = $2
+     ORDER BY created_at DESC`,
+    [patientId, laboratoryId]
   );
   return result.rows;
 }
 
-export async function findExamsByPatientIdWithReportSummary(patientId) {
+export async function findExamsByPatientIdWithReportSummary(patientId, laboratoryId) {
   const result = await query(
     `SELECT e.*, r.conclusion AS report_conclusion, r.updated_at AS report_updated_at
      FROM exams e
      LEFT JOIN reports r ON r.exam_id = e.id
      WHERE e.patient_id = $1
+       AND e.laboratory_id = $2
      ORDER BY e.created_at DESC`,
-    [patientId]
+    [patientId, laboratoryId]
   );
   return result.rows.map((row) => {
     const { report_conclusion, report_updated_at, ...exam } = row;
@@ -115,14 +128,14 @@ export async function findExamsByPatientIdWithReportSummary(patientId) {
   });
 }
 
-export async function findAllExams(filters = {}) {
+export async function findAllExams(filters = {}, laboratoryId) {
   const baseQuery = `
     SELECT e.*, p.first_name AS patient_first_name, p.last_name AS patient_last_name
     FROM exams e
     LEFT JOIN patients p ON p.id = e.patient_id
   `;
-  const conditions = [];
-  const params = [];
+  const conditions = ['e.laboratory_id = $1'];
+  const params = [laboratoryId];
 
   if (filters.status) {
     params.push(filters.status);
@@ -157,7 +170,7 @@ export async function findAllExams(filters = {}) {
   }
 
   if (filters.keyword) {
-    params.push(filters.keyword);
+    params.push(`%${filters.keyword}%`);
     conditions.push(`EXISTS (SELECT 1 FROM unnest(e.diagnosis_keywords) AS k WHERE k ILIKE $${params.length})`);
   }
 
@@ -169,8 +182,11 @@ export async function findAllExams(filters = {}) {
   return result.rows;
 }
 
-export async function findExamById(examId) {
-  const result = await query('SELECT * FROM exams WHERE id = $1', [examId]);
+export async function findExamById(examId, laboratoryId) {
+  const result = await query(
+    'SELECT * FROM exams WHERE id = $1 AND laboratory_id = $2',
+    [examId, laboratoryId]
+  );
   return result.rows[0] || null;
 }
 
@@ -215,7 +231,7 @@ export async function findCaseArchivePreviewByExamId(laboratoryId, examId) {
   };
 }
 
-export async function updateExamById(examId, payload) {
+export async function updateExamById(examId, laboratoryId, payload) {
   const result = await query(
     `UPDATE exams
      SET
@@ -231,7 +247,7 @@ export async function updateExamById(examId, payload) {
        status = COALESCE($11, status),
        urgent = COALESCE($12, urgent),
        updated_at = NOW()
-     WHERE id = $1
+     WHERE id = $1 AND laboratory_id = $13
      RETURNING *`,
     [
       examId,
@@ -246,16 +262,20 @@ export async function updateExamById(examId, payload) {
       payload.diagnosis_keywords,
       payload.status,
       payload.urgent ?? null,
+      laboratoryId,
     ]
   );
 
   return result.rows[0] || null;
 }
 
-export async function clearResultIssuedDateForExam(examId) {
+export async function clearResultIssuedDateForExam(examId, laboratoryId) {
   const result = await query(
-    'UPDATE exams SET result_issued_date = NULL, updated_at = NOW() WHERE id = $1 RETURNING *',
-    [examId]
+    `UPDATE exams
+     SET result_issued_date = NULL, updated_at = NOW()
+     WHERE id = $1 AND laboratory_id = $2
+     RETURNING *`,
+    [examId, laboratoryId]
   );
   return result.rows[0] ?? null;
 }
@@ -272,9 +292,10 @@ export async function createExamWithReport(payload) {
   try {
     await client.query('BEGIN');
 
-    const patientResult = await client.query('SELECT id FROM patients WHERE id = $1', [
-      payload.patient_id,
-    ]);
+    const patientResult = await client.query(
+      'SELECT id FROM patients WHERE id = $1 AND laboratory_id = $2',
+      [payload.patient_id, payload.laboratory_id]
+    );
 
     if (!patientResult.rows[0]) {
       await client.query('ROLLBACK');
@@ -350,40 +371,57 @@ export async function createExamWithReport(payload) {
   }
 }
 
-export async function findReportByExamId(examId) {
-  const result = await query('SELECT * FROM reports WHERE exam_id = $1', [examId]);
+export async function findReportByExamId(examId, laboratoryId) {
+  const result = await query(
+    `SELECT r.*
+     FROM reports r
+     INNER JOIN exams e ON e.id = r.exam_id
+     WHERE r.exam_id = $1
+       AND e.laboratory_id = $2`,
+    [examId, laboratoryId]
+  );
   return result.rows[0] || null;
 }
 
-export async function createEmptyReportForExamId(examId) {
+export async function createEmptyReportForExamId(examId, laboratoryId) {
   const result = await query(
     `INSERT INTO reports (exam_id, clinical_info, macroscopy, microscopy, conclusion)
-     VALUES ($1, '', '', '', '')
+     SELECT $1, '', '', '', ''
+     WHERE EXISTS (
+       SELECT 1
+       FROM exams e
+       WHERE e.id = $1
+         AND e.laboratory_id = $2
+     )
      ON CONFLICT (exam_id) DO NOTHING
      RETURNING *`,
-    [examId]
+    [examId, laboratoryId]
   );
 
   return result.rows[0] || null;
 }
 
-export async function updateReportByExamId(examId, payload) {
+export async function updateReportByExamId(examId, payload, laboratoryId) {
   const result = await query(
-    `UPDATE reports
+    `UPDATE reports AS r
      SET
        clinical_info = COALESCE($2, clinical_info),
        macroscopy = COALESCE($3, macroscopy),
        microscopy = COALESCE($4, microscopy),
        conclusion = COALESCE($5, conclusion),
        updated_at = NOW()
-     WHERE exam_id = $1
-     RETURNING *`,
+     FROM exams AS e
+     WHERE r.exam_id = $1
+       AND e.id = r.exam_id
+       AND e.laboratory_id = $6
+     RETURNING r.*`,
     [
       examId,
       payload.clinical_info,
       payload.macroscopy,
       payload.microscopy,
       payload.conclusion,
+      laboratoryId,
     ]
   );
 
@@ -415,7 +453,7 @@ export async function createTemplate(payload) {
   return result.rows[0];
 }
 
-export async function updateTemplateById(templateId, payload) {
+export async function updateTemplateById(templateId, laboratoryId, payload) {
   const result = await query(
     `UPDATE report_templates
      SET
@@ -426,6 +464,7 @@ export async function updateTemplateById(templateId, payload) {
        conclusion     = COALESCE($6, conclusion),
        updated_at     = NOW()
      WHERE id = $1
+       AND laboratory_id = $7
      RETURNING *`,
     [
       templateId,
@@ -434,15 +473,16 @@ export async function updateTemplateById(templateId, payload) {
       payload.macroscopy,
       payload.microscopy,
       payload.conclusion,
+      laboratoryId,
     ]
   );
   return result.rows[0] || null;
 }
 
-export async function deleteTemplateById(templateId) {
+export async function deleteTemplateById(templateId, laboratoryId) {
   const result = await query(
-    'DELETE FROM report_templates WHERE id = $1 RETURNING *',
-    [templateId]
+    'DELETE FROM report_templates WHERE id = $1 AND laboratory_id = $2 RETURNING *',
+    [templateId, laboratoryId]
   );
   return result.rows[0] || null;
 }

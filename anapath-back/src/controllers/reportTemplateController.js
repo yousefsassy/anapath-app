@@ -4,6 +4,8 @@ import {
   updateTemplateById,
   deleteTemplateById,
 } from '../db/queries.js';
+import { parsePositiveInteger } from '../utils/requestValidation.js';
+import { resolveLaboratoryId } from '../utils/requestContext.js';
 
 function validateTemplatePayload(name, fields) {
   if (!name || !name.trim()) {
@@ -20,7 +22,7 @@ function validateTemplatePayload(name, fields) {
 
 export async function getTemplates(req, res, next) {
   try {
-    const labId = Number(req.query.laboratory_id) || 1;
+    const labId = resolveLaboratoryId(req);
     const templates = await findAllTemplatesByLabId(labId);
     return res.status(200).json({ success: true, data: templates });
   } catch (error) {
@@ -30,7 +32,8 @@ export async function getTemplates(req, res, next) {
 
 export async function createTemplateHandler(req, res, next) {
   try {
-    const { name, clinical_info, macroscopy, microscopy, conclusion, laboratory_id } = req.body;
+    const labId = resolveLaboratoryId(req);
+    const { name, clinical_info, macroscopy, microscopy, conclusion } = req.body;
     const validationError = validateTemplatePayload(name, {
       clinical_info,
       macroscopy,
@@ -42,7 +45,7 @@ export async function createTemplateHandler(req, res, next) {
     }
 
     const template = await createTemplate({
-      laboratory_id: Number(laboratory_id) || 1,
+      laboratory_id: labId,
       name: name.trim(),
       clinical_info: clinical_info || '',
       macroscopy: macroscopy || '',
@@ -62,7 +65,15 @@ export async function createTemplateHandler(req, res, next) {
 
 export async function updateTemplateHandler(req, res, next) {
   try {
-    const templateId = Number(req.params.id);
+    const labId = resolveLaboratoryId(req);
+    const templateId = parsePositiveInteger(req.params.id);
+    if (!templateId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant du modèle invalide.',
+      });
+    }
+
     const { name, clinical_info, macroscopy, microscopy, conclusion } = req.body;
 
     const validationError = validateTemplatePayload(name, {
@@ -75,7 +86,7 @@ export async function updateTemplateHandler(req, res, next) {
       return res.status(400).json({ success: false, message: validationError });
     }
 
-    const updated = await updateTemplateById(templateId, {
+    const updated = await updateTemplateById(templateId, labId, {
       name: name.trim(),
       clinical_info,
       macroscopy,
@@ -99,8 +110,16 @@ export async function updateTemplateHandler(req, res, next) {
 
 export async function deleteTemplateHandler(req, res, next) {
   try {
-    const templateId = Number(req.params.id);
-    const deleted = await deleteTemplateById(templateId);
+    const labId = resolveLaboratoryId(req);
+    const templateId = parsePositiveInteger(req.params.id);
+    if (!templateId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant du modèle invalide.',
+      });
+    }
+
+    const deleted = await deleteTemplateById(templateId, labId);
 
     if (!deleted) {
       return res.status(404).json({ success: false, message: 'Modèle introuvable.' });

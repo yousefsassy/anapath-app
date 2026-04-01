@@ -52,11 +52,12 @@ export function PatientsListPage() {
       patients.filter((p) => {
         const full = `${p.first_name} ${p.last_name}`.toLowerCase()
         const rev = `${p.last_name} ${p.first_name}`.toLowerCase()
+        const phone = (p.phone ?? '').toLowerCase()
         const matchSearch =
           !normalizedSearch ||
           full.includes(normalizedSearch) ||
           rev.includes(normalizedSearch) ||
-          p.phone.toLowerCase().includes(normalizedSearch)
+          phone.includes(normalizedSearch)
         return matchSearch && matchesSexFilter(p, sexFilter)
       }),
     [normalizedSearch, patients, sexFilter]

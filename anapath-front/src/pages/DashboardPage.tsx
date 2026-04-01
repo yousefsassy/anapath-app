@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
@@ -25,6 +25,7 @@ const EXAM_TYPE_BUTTONS: { value: ExamTypeFilter; label: string }[] = [
 
 export function DashboardPage() {
   const navigate = useNavigate()
+  const requestIdRef = useRef(0)
   const [exams, setExams] = useState<Exam[]>([])
   const [stats, setStats] = useState<ExamStats | null>(null)
   const [activeFilter, setActiveFilter] = useState<StatusFilter>('all')
@@ -53,6 +54,10 @@ export function DashboardPage() {
   }, [keywordSearch])
 
   useEffect(() => {
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
+    const controller = new AbortController()
+
     const loadExams = async () => {
       setLoading(true)
       setError(null)
@@ -64,16 +69,29 @@ export function DashboardPage() {
           ...(dateFrom ? { date_from: dateFrom } : {}),
           ...(dateTo ? { date_to: dateTo } : {}),
           ...(debouncedKeyword.trim() ? { keyword: debouncedKeyword.trim() } : {}),
-        })
+        }, { signal: controller.signal })
+
+        if (controller.signal.aborted || requestId !== requestIdRef.current) {
+          return
+        }
+
         setExams(data)
-      } catch {
+      } catch (loadError) {
+        if (controller.signal.aborted || requestId !== requestIdRef.current) {
+          return
+        }
+
         setError('Impossible de charger les prélèvements.')
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted && requestId === requestIdRef.current) {
+          setLoading(false)
+        }
       }
     }
 
     void loadExams()
+
+    return () => controller.abort()
   }, [activeFilter, examTypeFilter, debouncedSearch, dateFrom, dateTo, debouncedKeyword])
 
   const hasActiveFilters = searchTerm !== '' || examTypeFilter !== 'all' || dateFrom !== '' || dateTo !== '' || keywordSearch !== ''
@@ -169,7 +187,7 @@ export function DashboardPage() {
           </div>
 
           <label className="accueil-date-label">
-            Mot-clé
+            Mot-clé diagnostique
             <input
               type="text"
               className="accueil-date-input accueil-keyword-input"

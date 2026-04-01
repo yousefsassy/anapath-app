@@ -16,7 +16,7 @@ export const authService = {
     const cleanPassword = password.trim()
 
     if (!cleanEmail || !cleanPassword) {
-      throw new Error('Please provide email and password.')
+      throw new Error('Adresse e-mail et mot de passe obligatoires.')
     }
 
     const user = await apiClient.post<LoginResponse>(

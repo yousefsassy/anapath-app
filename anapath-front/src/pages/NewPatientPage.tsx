@@ -14,7 +14,7 @@ const initialFormState: NewPatientInput = {
   age: 0,
   sex: 'Female',
   phone: '',
-  birth_date: null,
+  birth_date: '',
   general_history: '',
 }
 
@@ -55,6 +55,11 @@ export function NewPatientPage() {
 
     if (form.age <= 0) {
       setError("L'âge doit être supérieur à 0.")
+      return
+    }
+
+    if (!form.birth_date) {
+      setError('La date de naissance est obligatoire.')
       return
     }
 
@@ -158,6 +163,19 @@ export function NewPatientPage() {
                   id="phone"
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                />
+              </FormField>
+
+              <FormField
+                label="Date de naissance"
+                htmlFor="birth_date"
+                helperText="Obligatoire. Non modifiable après création."
+              >
+                <input
+                  id="birth_date"
+                  type="date"
+                  value={form.birth_date}
+                  onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
                 />
               </FormField>
             </div>

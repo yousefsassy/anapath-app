@@ -1944,6 +1944,28 @@ td {
   line-height: 1.45;
 }
 
+.print-document-banner {
+  margin-bottom: 8mm;
+  padding: 3mm 4mm;
+  border: 1px solid #4f6470;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.print-document-banner--draft {
+  background: #f6f0dc;
+  border-color: #9a7a26;
+  color: #6d5514;
+}
+
+.print-document-banner--final {
+  background: #edf5f1;
+  border-color: #547469;
+  color: #28453b;
+}
+
 .print-entete {
   margin-bottom: 10mm;
 }

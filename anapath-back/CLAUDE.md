@@ -1,79 +1,103 @@
 # Backend Notes
 
-This is a backend-scoped companion note for Claude sessions working inside `anapath-back/`.
+This is a backend-scoped companion note for work inside `anapath-back/`.
 
-For project-wide status (frontend + backend), use root `CLAUDE.md` as the source of truth.
+For the mixed app overview, feature descriptions, and workflow context, use the root [README](../README.md).  
+For the full technical source of truth across frontend + backend, use root [CLAUDE.md](../CLAUDE.md).
 
-## Backend Purpose
-The backend provides the Anapath V1 API for doctor-only workflow operations:
-- authentication login (placeholder)
-- patient CRUD (list/create/detail/update)
-- exam CRUD (list/create/detail/update) with multi-filter search
-- report read/update per exam
+## Backend purpose
+
+The backend powers the doctor workflow through:
+- placeholder login
+- patient CRUD and patient search
+- patient exam history
+- exam list/detail/create/update
+- report load/save with lock on validated exams
 - report template CRUD
+- lab-scoped dashboard stats
+- validated case archive search and preview
 
-## Folder Overview
-- `server.js` - backend boot entry (port selection + startup logs)
-- `src/app.js` - Express app wiring (`cors`, JSON, `/api`, error handlers)
-- `src/routes/` - route groups by domain (`auth`, `health`, `patients`, `exams`, `reports`, `reportTemplates`)
-- `src/controllers/` - HTTP handlers and validation
-- `src/db/queries.js` - SQL data access and transaction logic
-- `src/db/schema.sql` / `src/db/seed.sql` - schema and seed
-- `src/config/database.js` - PostgreSQL pool/query helpers
+## Folder overview
 
-## Main Routes, Controllers, Queries
-- `GET /api/health` → `healthController.getHealth`
-- `POST /api/auth/login` → `authController.login`
-- `GET/POST/GET:id/PUT:id /api/patients` → `patientController`
-- `GET /api/patients/:id/exams` → `patientController.getPatientExams` (supports `?include=report_summary`)
-- `GET/POST/GET:id/PUT:id /api/exams` → `examController`
-  - `GET /api/exams` supports `?status=`, `?exam_type=`, `?search=` (all optional, ANDed in SQL)
-- `GET/PUT /api/reports/:examId` → `reportController`
-  - `PUT` returns **403** if `exam.status === 'completed'` (report lock)
-- `GET/POST/PUT:id/DELETE:id /api/report-templates` → `reportTemplateController`
-- Data access is centralized in `src/db/queries.js`
+- `server.js` — backend entrypoint
+- `src/app.js` — Express wiring
+- `src/routes/` — route groups by domain
+- `src/controllers/` — HTTP handlers and validation
+- `src/db/queries.js` — SQL data access and transactions
+- `src/db/schema.sql` / `src/db/seed.sql` — schema and seed
+- `src/db/archive_profile_*` — archive profiling fixture, explain script, and results
+- `src/config/database.js` — PostgreSQL pool/query helpers
+- `tests/api.contract.test.js` — minimal backend contract/regression coverage
 
-## Implemented Backend Capabilities
-- Health endpoint includes DB connectivity status
-- Login checks `users` table and returns placeholder token payload
-- Patient create/detail/list/update with validation and read-only field protection
-- Exam create/detail/list/update with validation and read-only field protection
-- `GET /api/exams` multi-filter support (dynamic WHERE builder in `findAllExams`):
-  - `?status=registered|in_progress|completed` — exact match, 400 on invalid value
-  - `?exam_type=histology|cytology` — exact match, 400 on invalid value
-  - `?search=<term>` — ILIKE partial match on patient last name, first name, `exam_number`, `sample_nature`
-  - All filters are AND-combined; validation error messages are in French
-- `GET /api/patients/:id/exams` accepts optional `?include=report_summary`; when set, LEFT JOINs reports and returns `report_summary: { conclusion, updated_at } | null` per exam
-- Transactional exam creation with persistent `exam_number` generation via `exam_sequences`
-- Auto-create-empty-report behavior on report update when report row is missing
-- Report templates: full CRUD at `/api/report-templates` (4 content fields + `name`)
-- Recency ordering: all exam lists ordered `created_at DESC`
-- **Report lock:** `PUT /api/reports/:examId` checks `exam.status` first — returns 403 if `completed`
-- **Auto `result_issued_date`:** `PUT /api/exams/:id` — if incoming `status = 'completed'` and exam's current `result_issued_date` is null and not provided in request, sets it to today's date
-- **Reopen clear:** `PUT /api/exams/:id` — if transitioning `completed → in_progress`, calls `clearResultIssuedDateForExam()` after the standard update to NULL out `result_issued_date`. This is a separate targeted UPDATE (COALESCE cannot set a column to NULL).
+## Main routes
 
-## Important Data / Update Flows
-- Create exam (`POST /api/exams`):
-  1. validate patient exists
-  2. increment/get sequence by `(laboratory_id, exam_type)`
-  3. generate `exam_number` (`C####-YYYY` for cytology, `N-YYYY` for histology)
-  4. insert exam + default empty report in one transaction
-- Update patient/exam (`PUT`): only editable fields accepted; read-only fields rejected with `400`
-- Reports: `PUT /api/reports/:examId` checks exam status (403 if completed), then guarantees report row existence before update
-- Reopen exam: send `{ status: 'in_progress' }` to `PUT /api/exams/:id` when current status is `completed` — backend detects the transition and clears `result_issued_date`
+- `GET /api/health`
+- `POST /api/auth/login`
+- `GET /api/patients`
+- `POST /api/patients`
+- `GET /api/patients/search`
+- `GET /api/patients/:id`
+- `PUT /api/patients/:id`
+- `GET /api/patients/:id/exams`
+- `GET /api/exams`
+- `GET /api/exams/stats`
+- `POST /api/exams`
+- `GET /api/exams/:id`
+- `PUT /api/exams/:id`
+- `GET /api/reports/:examId`
+- `PUT /api/reports/:examId`
+- `GET /api/report-templates`
+- `POST /api/report-templates`
+- `PUT /api/report-templates/:id`
+- `DELETE /api/report-templates/:id`
+- `GET /api/case-archive/search`
+- `GET /api/case-archive/:id/preview`
 
-## Known Backend Limitations
-- Auth is placeholder only:
-  - plaintext password comparison
-  - no JWT signing/verification middleware
-  - no route-level authorization enforcement
-- No RBAC or multi-tenant authorization checks beyond stored IDs
-- No pagination support for list endpoints
-- No automated backend test suite currently present
+## Important backend behavior
 
-## Session Guidance
+- All responses use `{ success, message?, data }`.
+- Validation/error messages returned to the frontend are in French.
+- Requests are scoped by lab through `X-Laboratory-Id`, with fallback `1` for the current placeholder auth flow.
+- `GET /api/exams/stats` must remain defined before `GET /api/exams/:id`.
+- Exam creation is transactional and auto-creates the linked empty report.
+- Exam numbers are generated through `exam_sequences`.
+- `PUT /api/reports/:examId` returns `403` when the exam is already `completed`.
+- Once an exam is `completed`, direct metadata correction is blocked.
+- The only allowed post-validation change is reopening the exam with `status: 'in_progress'`.
+- Reopening clears `result_issued_date`.
+
+## Backend tests and profiling
+
+- Minimal contract tests exist in `tests/api.contract.test.js`.
+- Run them with `npm test`.
+- Archive profiling assets exist in:
+  - `src/db/archive_profile_fixture.sql`
+  - `src/db/archive_profile_explain.sql`
+  - `src/db/archive_profile_results.md`
+
+Useful commands:
+
+```bash
+npm run dev
+npm test
+psql -d anapath -f src/db/schema.sql
+psql -d anapath -f src/db/seed.sql
+psql -d anapath -f src/db/archive_profile_fixture.sql
+psql -d anapath -f src/db/archive_profile_explain.sql
+```
+
+## Known backend limitations
+
+- auth is placeholder only
+- no JWT verification
+- no RBAC
+- no pagination
+- no audit trail for report history
+- archive search remains PostgreSQL full-text search, not an external search stack
+
+## Session guidance
+
 - Keep backend edits small and workflow-safe by default.
-- Preserve response envelope format: `{ success, message?, data }`.
-- Validation error messages returned to the frontend should be in French.
-- Internal DB/API field names and canonical values remain in English — never rename for display reasons.
-- If behavior changes impact the full app workflow, update root `CLAUDE.md` as well.
+- Preserve canonical DB/API values in English.
+- Keep user-facing messages in French.
+- Prefer updating root `CLAUDE.md` when behavior changes affect the whole app.

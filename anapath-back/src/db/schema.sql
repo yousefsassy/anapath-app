@@ -97,6 +97,24 @@ AS $$
   SELECT array_to_string(input_array, separator);
 $$;
 
+UPDATE exams
+SET status = 'registered'
+WHERE status IS NULL
+   OR status NOT IN ('registered', 'in_progress', 'completed');
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'exams_status_check'
+  ) THEN
+    ALTER TABLE exams
+      ADD CONSTRAINT exams_status_check
+      CHECK (status IN ('registered', 'in_progress', 'completed'));
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_patients_laboratory_id ON patients(laboratory_id);
 CREATE INDEX IF NOT EXISTS idx_exams_laboratory_id ON exams(laboratory_id);
 CREATE INDEX IF NOT EXISTS idx_exams_patient_id ON exams(patient_id);

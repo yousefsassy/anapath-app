@@ -33,6 +33,14 @@ function buildSheetClasses(s: PrintSettings): string {
     .join(' ')
 }
 
+function buildPdfFilename(exam: Exam): string {
+  if (exam.status === 'completed') {
+    return `CR-${exam.exam_number}.pdf`
+  }
+
+  return `CR-BROUILLON-${exam.exam_number}.pdf`
+}
+
 export function ExamPrintPage() {
   const { id = '' } = useParams()
   const printSheetRef = useRef<HTMLElement>(null)
@@ -53,24 +61,20 @@ export function ExamPrintPage() {
       setIsLoading(true)
       setError('')
       try {
-        const examData = await examService.getById(id)
+        const workspace = await examService.getWorkspaceByExamId(id)
 
-        if (!examData) {
+        if (!workspace) {
           setExam(null)
           setPatient(null)
           setReport(emptyReport)
           return
         }
 
-        setExam(examData)
+        setExam(workspace.exam)
+        setReport(workspace.report)
 
-        const [patientData, reportData] = await Promise.all([
-          patientService.getById(examData.patient_id),
-          examService.getReportByExamId(id),
-        ])
-
+        const patientData = await patientService.getById(workspace.exam.patient_id)
         setPatient(patientData)
-        setReport(reportData ?? emptyReport)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Impossible de charger le document.')
       } finally {
@@ -93,7 +97,7 @@ export function ExamPrintPage() {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       await html2pdf()
         .set({
-          filename: `CR-${exam.exam_number}.pdf`,
+          filename: buildPdfFilename(exam),
           html2canvas: { scale: 2, useCORS: true, logging: false },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
           margin: 0,
@@ -246,6 +250,15 @@ export function ExamPrintPage() {
       )}
 
       <article ref={printSheetRef} className={buildSheetClasses(printSettings)} aria-label="Compte rendu imprimable">
+        {exam.status === 'completed' ? (
+          <div className="print-document-banner print-document-banner--final">
+            Document validé{exam.result_issued_date ? ` le ${formatDate(exam.result_issued_date)}` : ''}
+          </div>
+        ) : (
+          <div className="print-document-banner print-document-banner--draft">
+            Brouillon — prélèvement non validé
+          </div>
+        )}
 
         {/* ── ENTÊTE ─────────────────────────────────────────────── */}
         <header className="print-entete">

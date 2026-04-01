@@ -6,28 +6,71 @@ import {
   clearResultIssuedDateForExam,
   getExamStats,
 } from '../db/queries.js';
+import {
+  VALID_EXAM_STATUSES,
+  VALID_EXAM_TYPES,
+  buildRequiredFieldsMessage,
+  parsePositiveInteger,
+  validateDateRange,
+  validateOptionalIsoDate,
+} from '../utils/requestValidation.js';
+import { resolveLaboratoryId } from '../utils/requestContext.js';
+
+const EXAM_FIELD_LABELS = {
+  patient_id: 'patient',
+  exam_type: "type d'examen",
+};
 
 function validateExamPayload(payload) {
-  const requiredFields = ['patient_id', 'exam_type'];
-  const missingFields = requiredFields.filter((field) => payload[field] === undefined || payload[field] === null || payload[field] === '');
-
-  if (missingFields.length > 0) {
-    return `Missing required fields: ${missingFields.join(', ')}`;
+  const missingFieldsMessage = buildRequiredFieldsMessage(
+    ['patient_id', 'exam_type'],
+    payload,
+    EXAM_FIELD_LABELS
+  );
+  if (missingFieldsMessage) {
+    return missingFieldsMessage;
   }
 
-  if (!['cytology', 'histology'].includes(payload.exam_type)) {
-    return 'exam_type must be cytology or histology';
+  if (!parsePositiveInteger(payload.patient_id)) {
+    return 'Identifiant patient invalide.';
+  }
+
+  if (!VALID_EXAM_TYPES.includes(payload.exam_type)) {
+    return `Type d'examen invalide. Valeurs acceptées : ${VALID_EXAM_TYPES.join(', ')}`;
+  }
+
+  if (payload.status !== undefined && !VALID_EXAM_STATUSES.includes(payload.status)) {
+    return `Statut invalide. Valeurs acceptées : ${VALID_EXAM_STATUSES.join(', ')}`;
+  }
+
+  const requestedDateError = validateOptionalIsoDate(payload.requested_date, 'la date de demande');
+  if (requestedDateError) {
+    return requestedDateError;
+  }
+
+  const registeredDateError = validateOptionalIsoDate(
+    payload.registered_date,
+    "la date d'enregistrement"
+  );
+  if (registeredDateError) {
+    return registeredDateError;
+  }
+
+  const resultIssuedDateError = validateOptionalIsoDate(
+    payload.result_issued_date,
+    "la date d'émission du résultat"
+  );
+  if (resultIssuedDateError) {
+    return resultIssuedDateError;
   }
 
   return null;
 }
 
-const VALID_STATUSES = ['registered', 'in_progress', 'completed'];
-const VALID_EXAM_TYPES = ['histology', 'cytology'];
-
 export async function getStats(req, res, next) {
   try {
-    const raw = await getExamStats(1);
+    const labId = resolveLaboratoryId(req);
+    const raw = await getExamStats(labId);
     return res.json({
       success: true,
       data: {
@@ -43,10 +86,11 @@ export async function getStats(req, res, next) {
 
 export async function getExams(req, res, next) {
   try {
-    if (req.query.status && !VALID_STATUSES.includes(req.query.status)) {
+    const labId = resolveLaboratoryId(req);
+    if (req.query.status && !VALID_EXAM_STATUSES.includes(req.query.status)) {
       return res.status(400).json({
         success: false,
-        message: `Statut invalide. Valeurs acceptées : ${VALID_STATUSES.join(', ')}`,
+        message: `Statut invalide. Valeurs acceptées : ${VALID_EXAM_STATUSES.join(', ')}`,
       });
     }
     if (req.query.exam_type && !VALID_EXAM_TYPES.includes(req.query.exam_type)) {
@@ -55,23 +99,11 @@ export async function getExams(req, res, next) {
         message: `Type d'examen invalide. Valeurs acceptées : ${VALID_EXAM_TYPES.join(', ')}`,
       });
     }
-    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-    if (req.query.date_from && !DATE_RE.test(req.query.date_from)) {
+    const dateRangeError = validateDateRange(req.query.date_from, req.query.date_to);
+    if (dateRangeError) {
       return res.status(400).json({
         success: false,
-        message: 'Format de date invalide. Utilisez YYYY-MM-DD.',
-      });
-    }
-    if (req.query.date_to && !DATE_RE.test(req.query.date_to)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Format de date invalide. Utilisez YYYY-MM-DD.',
-      });
-    }
-    if (req.query.date_from && req.query.date_to && req.query.date_from > req.query.date_to) {
-      return res.status(400).json({
-        success: false,
-        message: 'La date de début doit être antérieure ou égale à la date de fin.',
+        message: dateRangeError,
       });
     }
     const filters = {
@@ -82,7 +114,7 @@ export async function getExams(req, res, next) {
       ...(req.query.date_to ? { date_to: req.query.date_to } : {}),
       ...(req.query.keyword?.trim() ? { keyword: req.query.keyword.trim() } : {}),
     };
-    const exams = await findAllExams(filters);
+    const exams = await findAllExams(filters, labId);
     return res.status(200).json({ success: true, data: exams });
   } catch (error) {
     return next(error);
@@ -91,13 +123,14 @@ export async function getExams(req, res, next) {
 
 export async function createExam(req, res, next) {
   try {
+    const labId = resolveLaboratoryId(req);
     const error = validateExamPayload(req.body);
     if (error) {
       return res.status(400).json({ success: false, message: error });
     }
 
     const result = await createExamWithReport({
-      laboratory_id: Number(req.body.laboratory_id) || 1,
+      laboratory_id: labId,
       patient_id: Number(req.body.patient_id),
       exam_type: req.body.exam_type,
       clinic_name: req.body.clinic_name || '',
@@ -117,13 +150,13 @@ export async function createExam(req, res, next) {
     if (result.error === 'PATIENT_NOT_FOUND') {
       return res.status(404).json({
         success: false,
-        message: 'Patient not found for this exam',
+        message: 'Patient introuvable pour ce prélèvement.',
       });
     }
 
     return res.status(201).json({
       success: true,
-      message: 'Exam created successfully',
+      message: 'Prélèvement créé.',
       data: result.exam,
     });
   } catch (error) {
@@ -133,11 +166,16 @@ export async function createExam(req, res, next) {
 
 export async function getExamById(req, res, next) {
   try {
-    const examId = Number(req.params.id);
-    const exam = await findExamById(examId);
+    const labId = resolveLaboratoryId(req);
+    const examId = parsePositiveInteger(req.params.id);
+    if (!examId) {
+      return res.status(400).json({ success: false, message: 'Identifiant prélèvement invalide.' });
+    }
+
+    const exam = await findExamById(examId, labId);
 
     if (!exam) {
-      return res.status(404).json({ success: false, message: 'Exam not found' });
+      return res.status(404).json({ success: false, message: 'Prélèvement introuvable.' });
     }
 
     return res.status(200).json({ success: true, data: exam });
@@ -177,23 +215,71 @@ const READ_ONLY_FIELDS = [
 
 export async function updateExam(req, res, next) {
   try {
-    const examId = Number(req.params.id);
-    const exam = await findExamById(examId);
+    const labId = resolveLaboratoryId(req);
+    const examId = parsePositiveInteger(req.params.id);
+    if (!examId) {
+      return res.status(400).json({ success: false, message: 'Identifiant prélèvement invalide.' });
+    }
+
+    const exam = await findExamById(examId, labId);
 
     if (!exam) {
-      return res.status(404).json({ success: false, message: 'Exam not found' });
+      return res.status(404).json({ success: false, message: 'Prélèvement introuvable.' });
+    }
+
+    const updateKeys = Object.keys(req.body).filter((field) => req.body[field] !== undefined);
+
+    if (
+      exam.status === 'completed' &&
+      !(updateKeys.length === 1 && req.body.status === 'in_progress')
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Ce prélèvement est déjà validé. Rouvrez le dossier avant toute correction.',
+      });
     }
 
     const forbiddenField = READ_ONLY_FIELDS.find((field) => req.body[field] !== undefined);
     if (forbiddenField) {
       return res.status(400).json({
         success: false,
-        message: `${forbiddenField} is read-only and cannot be updated`,
+        message: `Le champ ${forbiddenField} est en lecture seule et ne peut pas être modifié.`,
       });
     }
 
-    if (req.body.exam_type !== undefined && !['cytology', 'histology'].includes(req.body.exam_type)) {
-      return res.status(400).json({ success: false, message: 'exam_type must be cytology or histology' });
+    if (req.body.exam_type !== undefined && !VALID_EXAM_TYPES.includes(req.body.exam_type)) {
+      return res.status(400).json({
+        success: false,
+        message: `Type d'examen invalide. Valeurs acceptées : ${VALID_EXAM_TYPES.join(', ')}`,
+      });
+    }
+
+    if (req.body.status !== undefined && !VALID_EXAM_STATUSES.includes(req.body.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Statut invalide. Valeurs acceptées : ${VALID_EXAM_STATUSES.join(', ')}`,
+      });
+    }
+
+    const requestedDateError = validateOptionalIsoDate(req.body.requested_date, 'la date de demande');
+    if (requestedDateError) {
+      return res.status(400).json({ success: false, message: requestedDateError });
+    }
+
+    const registeredDateError = validateOptionalIsoDate(
+      req.body.registered_date,
+      "la date d'enregistrement"
+    );
+    if (registeredDateError) {
+      return res.status(400).json({ success: false, message: registeredDateError });
+    }
+
+    const resultIssuedDateError = validateOptionalIsoDate(
+      req.body.result_issued_date,
+      "la date d'émission du résultat"
+    );
+    if (resultIssuedDateError) {
+      return res.status(400).json({ success: false, message: resultIssuedDateError });
     }
 
     const updatePayload = Object.fromEntries(
@@ -205,7 +291,7 @@ export async function updateExam(req, res, next) {
     if (Object.keys(updatePayload).length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'No editable fields provided for update',
+        message: 'Aucun champ modifiable fourni pour la mise à jour.',
       });
     }
 
@@ -222,16 +308,16 @@ export async function updateExam(req, res, next) {
       updatePayload.result_issued_date = new Date().toISOString().slice(0, 10);
     }
 
-    let updatedExam = await updateExamById(examId, updatePayload);
+    let updatedExam = await updateExamById(examId, labId, updatePayload);
 
     // On reopen: clear result_issued_date only when transitioning completed → in_progress
     if (updatePayload.status === 'in_progress' && exam.status === 'completed') {
-      updatedExam = await clearResultIssuedDateForExam(examId);
+      updatedExam = await clearResultIssuedDateForExam(examId, labId);
     }
 
     return res.status(200).json({
       success: true,
-      message: 'Exam updated successfully',
+      message: 'Prélèvement mis à jour.',
       data: updatedExam,
     });
   } catch (error) {

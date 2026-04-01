@@ -1,7 +1,22 @@
 /** Format an ISO date string as dd/mm/yyyy (fr-FR locale). Returns '—' for empty values. */
 export function formatDate(value: string | null | undefined): string {
   if (!value) return '—'
-  return new Date(value).toLocaleDateString('fr-FR')
+
+  const trimmedValue = value.trim()
+  if (!trimmedValue) return '—'
+
+  const sqlDateMatch = trimmedValue.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (sqlDateMatch) {
+    const [, year, month, day] = sqlDateMatch
+    return `${day}/${month}/${year}`
+  }
+
+  const parsedDate = new Date(trimmedValue)
+  if (Number.isNaN(parsedDate.getTime())) {
+    return '—'
+  }
+
+  return parsedDate.toLocaleDateString('fr-FR')
 }
 
 /** Truncate a string to `max` characters, appending '…' if cut. Returns '' for empty/null values. */

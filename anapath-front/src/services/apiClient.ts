@@ -19,9 +19,27 @@ interface RequestOptions extends RequestInit {
   skipAuth?: boolean
 }
 
+export class ApiClientError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiClientError'
+    this.status = status
+  }
+}
+
+function getDefaultErrorMessage(status: number): string {
+  if (status === 400) return 'Requête invalide.'
+  if (status === 401) return 'Authentification requise.'
+  if (status === 403) return 'Action non autorisée.'
+  if (status === 404) return 'Ressource introuvable.'
+  return 'Une erreur est survenue.'
+}
+
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   if (!API_BASE_URL) {
-    throw new Error('VITE_API_BASE_URL is not configured')
+    throw new Error("L'URL de l'API n'est pas configurée.")
   }
 
   const { skipAuth = false, headers, ...restOptions } = options
@@ -34,6 +52,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
   if (!skipAuth && authUser?.token) {
     requestHeaders.set('Authorization', `Bearer ${authUser.token}`)
+    requestHeaders.set('X-Laboratory-Id', String(authUser.laboratory_id))
   }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -41,11 +60,21 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     headers: requestHeaders,
   })
 
-  const payload = (await response.json()) as ApiResponse<T>
+  let payload: ApiResponse<T> | null = null
 
-  if (!response.ok || !payload.success) {
-    const message = payload.success ? 'Request failed' : payload.message || 'Request failed'
-    throw new Error(message)
+  try {
+    payload = (await response.json()) as ApiResponse<T>
+  } catch {
+    payload = null
+  }
+
+  if (!response.ok || !payload?.success) {
+    const status = response.ok ? 400 : response.status
+    const message =
+      payload && !payload.success
+        ? payload.message || getDefaultErrorMessage(status)
+        : getDefaultErrorMessage(status)
+    throw new ApiClientError(message, status)
   }
 
   return payload.data

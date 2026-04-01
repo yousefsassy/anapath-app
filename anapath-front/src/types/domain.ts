@@ -21,7 +21,7 @@ export interface Patient {
   last_name: string
   age: number
   sex: SexBackend | SexDisplay
-  phone: string
+  phone: string | null
   birth_date: string | null
   general_history: string
   created_at: string
@@ -51,7 +51,6 @@ export interface Exam {
   diagnosis_keywords: string[] | string
   status: ExamStatus
   urgent: boolean
-  report?: Report
   created_at: string
   updated_at: string
   // Joined fields from exam list endpoint
@@ -65,7 +64,7 @@ export interface NewPatientInput {
   age: number
   sex: SexDisplay
   phone: string
-  birth_date: string | null
+  birth_date: string
   general_history: string
 }
 
@@ -85,6 +84,11 @@ export interface NewExamInput {
 }
 
 export type ReportInput = Report
+
+export interface ExamWorkspaceData {
+  exam: Exam
+  report: ReportInput
+}
 
 export interface ReportSummary {
   conclusion: string

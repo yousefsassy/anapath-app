@@ -4,19 +4,28 @@ import {
   createEmptyReportForExamId,
   updateReportByExamId as updateReportByExamIdQuery,
 } from '../db/queries.js';
+import { parsePositiveInteger } from '../utils/requestValidation.js';
+import { resolveLaboratoryId } from '../utils/requestContext.js';
 
 export async function getReportByExamId(req, res, next) {
   try {
-    const examId = Number(req.params.examId);
-
-    const exam = await findExamById(examId);
-    if (!exam) {
-      return res.status(404).json({ success: false, message: 'Exam not found' });
+    const labId = resolveLaboratoryId(req);
+    const examId = parsePositiveInteger(req.params.examId);
+    if (!examId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant prélèvement invalide.',
+      });
     }
 
-    const report = await findReportByExamId(examId);
+    const exam = await findExamById(examId, labId);
+    if (!exam) {
+      return res.status(404).json({ success: false, message: 'Prélèvement introuvable.' });
+    }
+
+    const report = await findReportByExamId(examId, labId);
     if (!report) {
-      return res.status(404).json({ success: false, message: 'Report not found' });
+      return res.status(404).json({ success: false, message: 'Compte rendu introuvable.' });
     }
 
     return res.status(200).json({ success: true, data: report });
@@ -27,11 +36,18 @@ export async function getReportByExamId(req, res, next) {
 
 export async function updateReportByExamId(req, res, next) {
   try {
-    const examId = Number(req.params.examId);
+    const labId = resolveLaboratoryId(req);
+    const examId = parsePositiveInteger(req.params.examId);
+    if (!examId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant prélèvement invalide.',
+      });
+    }
 
-    const exam = await findExamById(examId);
+    const exam = await findExamById(examId, labId);
     if (!exam) {
-      return res.status(404).json({ success: false, message: 'Exam not found' });
+      return res.status(404).json({ success: false, message: 'Prélèvement introuvable.' });
     }
 
     if (exam.status === 'completed') {
@@ -41,21 +57,24 @@ export async function updateReportByExamId(req, res, next) {
       });
     }
 
-    let report = await findReportByExamId(examId);
+    let report = await findReportByExamId(examId, labId);
     if (!report) {
-      await createEmptyReportForExamId(examId);
-      report = await findReportByExamId(examId);
+      await createEmptyReportForExamId(examId, labId);
+      report = await findReportByExamId(examId, labId);
     }
 
     if (!report) {
-      return res.status(500).json({ success: false, message: 'Unable to initialize report' });
+      return res.status(500).json({
+        success: false,
+        message: "Impossible d'initialiser le compte rendu.",
+      });
     }
 
-    const updatedReport = await updateReportByExamIdQuery(examId, req.body);
+    const updatedReport = await updateReportByExamIdQuery(examId, req.body, labId);
 
     return res.status(200).json({
       success: true,
-      message: 'Report updated successfully',
+      message: 'Compte rendu mis à jour.',
       data: updatedReport,
     });
   } catch (error) {

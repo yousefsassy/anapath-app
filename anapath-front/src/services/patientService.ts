@@ -1,5 +1,5 @@
 import type { Exam, ExamWithReportSummary, NewPatientInput, Patient } from '../types/domain'
-import { apiClient } from './apiClient'
+import { ApiClientError, apiClient } from './apiClient'
 import { authService } from './authService'
 import { mapSexDisplayToBackend } from '../utils/domainMappings'
 
@@ -33,8 +33,7 @@ export const patientService = {
     try {
       return await apiClient.get<Patient>(`/patients/${id}`)
     } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      if (message.toLowerCase().includes('not found')) {
+      if (error instanceof ApiClientError && error.status === 404) {
         return null
       }
       throw error
@@ -57,13 +56,12 @@ export const patientService = {
     const authUser = authService.getCurrentUser()
 
     if (!authUser) {
-      throw new Error('Authentication required')
+      throw new Error('Session utilisateur indisponible.')
     }
 
     return apiClient.post<Patient>('/patients', {
       ...payload,
       sex: mapSexDisplayToBackend(payload.sex),
-      laboratory_id: authUser.laboratory_id,
     })
   },
 
@@ -88,8 +86,7 @@ export const patientService = {
         general_history: payload.general_history,
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      if (message.toLowerCase().includes('not found')) {
+      if (error instanceof ApiClientError && error.status === 404) {
         return null
       }
       throw error

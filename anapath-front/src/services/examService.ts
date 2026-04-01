@@ -1,10 +1,16 @@
-import type { Exam, ExamStats, ExamStatus, NewExamInput, ReportInput } from '../types/domain'
-import { apiClient } from './apiClient'
+import type {
+  Exam,
+  ExamStats,
+  ExamStatus,
+  ExamWorkspaceData,
+  NewExamInput,
+  ReportInput,
+} from '../types/domain'
+import { ApiClientError, apiClient } from './apiClient'
 import { authService } from './authService'
 import { mapExamStatusToBackend } from '../utils/domainMappings'
 
 interface CreateExamPayload {
-  laboratory_id: number
   patient_id: number
   exam_type: string
   clinic_name: string
@@ -73,12 +79,19 @@ export interface ExamListFilters {
   keyword?: string
 }
 
+interface ExamListRequestOptions {
+  signal?: AbortSignal
+}
+
 export const examService = {
   getStats: async (): Promise<ExamStats> => {
     return apiClient.get<ExamStats>('/exams/stats')
   },
 
-  list: async (filters: ExamListFilters = {}): Promise<Exam[]> => {
+  list: async (
+    filters: ExamListFilters = {},
+    options?: ExamListRequestOptions,
+  ): Promise<Exam[]> => {
     const params = new URLSearchParams()
     if (filters.status) params.set('status', filters.status)
     if (filters.exam_type) params.set('exam_type', filters.exam_type)
@@ -87,15 +100,14 @@ export const examService = {
     if (filters.date_to) params.set('date_to', filters.date_to)
     if (filters.keyword?.trim()) params.set('keyword', filters.keyword.trim())
     const qs = params.toString()
-    return apiClient.get<Exam[]>(qs ? `/exams?${qs}` : '/exams')
+    return apiClient.get<Exam[]>(qs ? `/exams?${qs}` : '/exams', options)
   },
 
   updateStatus: async (id: number | string, status: 'registered' | 'in_progress' | 'completed'): Promise<Exam | null> => {
     try {
       return await apiClient.put<Exam>(`/exams/${id}`, { status })
     } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      if (message.toLowerCase().includes('not found')) return null
+      if (error instanceof ApiClientError && error.status === 404) return null
       throw error
     }
   },
@@ -111,8 +123,7 @@ export const examService = {
     try {
       return await apiClient.get<Exam>(`/exams/${id}`)
     } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      if (message.toLowerCase().includes('not found')) {
+      if (error instanceof ApiClientError && error.status === 404) {
         return null
       }
       throw error
@@ -123,11 +134,10 @@ export const examService = {
     const authUser = authService.getCurrentUser()
 
     if (!authUser) {
-      throw new Error('Authentication required')
+      throw new Error('Session utilisateur indisponible.')
     }
 
     const requestBody: CreateExamPayload = {
-      laboratory_id: authUser.laboratory_id,
       patient_id: Number(payload.patient_id),
       exam_type: payload.exam_type,
       clinic_name: payload.clinic_name,
@@ -143,6 +153,18 @@ export const examService = {
     }
 
     return apiClient.post<Exam>('/exams', requestBody)
+  },
+
+  getWorkspaceByExamId: async (id: number | string): Promise<ExamWorkspaceData | null> => {
+    const exam = await examService.getById(id)
+
+    if (!exam) {
+      return null
+    }
+
+    const report = (await examService.getReportByExamId(id)) ?? toReportInput(null)
+
+    return { exam, report }
   },
 
   update: async (id: number | string, payload: UpdateExamInput): Promise<Exam | null> => {
@@ -163,8 +185,7 @@ export const examService = {
 
       return await apiClient.put<Exam>(`/exams/${id}`, requestBody)
     } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      if (message.toLowerCase().includes('not found')) {
+      if (error instanceof ApiClientError && error.status === 404) {
         return null
       }
       throw error
@@ -176,8 +197,7 @@ export const examService = {
       await apiClient.put<ReportInput>(`/reports/${id}`, report)
       return await examService.getById(id)
     } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      if (message.toLowerCase().includes('not found')) {
+      if (error instanceof ApiClientError && error.status === 404) {
         return null
       }
       throw error
@@ -189,8 +209,7 @@ export const examService = {
       const response = await apiClient.get<Partial<ReportInput>>(`/reports/${id}`)
       return toReportInput(response)
     } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      if (message.toLowerCase().includes('not found')) {
+      if (error instanceof ApiClientError && error.status === 404) {
         return null
       }
       throw error
@@ -202,8 +221,7 @@ export const examService = {
       const response = await apiClient.put<Partial<ReportInput>>(`/reports/${id}`, report)
       return toReportInput(response)
     } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      if (message.toLowerCase().includes('not found')) {
+      if (error instanceof ApiClientError && error.status === 404) {
         return null
       }
       throw error

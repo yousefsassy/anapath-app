@@ -3,8 +3,13 @@ import {
   findExamById,
   searchCaseArchive,
 } from '../db/queries.js';
+import {
+  VALID_EXAM_TYPES,
+  parsePositiveInteger,
+  validateDateRange,
+} from '../utils/requestValidation.js';
+import { resolveLaboratoryId } from '../utils/requestContext.js';
 
-const VALID_EXAM_TYPES = ['histology', 'cytology'];
 const VALID_SECTIONS = ['all', 'clinical_info', 'macroscopy', 'microscopy', 'conclusion'];
 const MAX_LIMIT = 50;
 const DEFAULT_LIMIT = 20;
@@ -32,6 +37,7 @@ function normalizeSourceKeywords(value) {
 
 export async function getCaseArchiveSearch(req, res, next) {
   try {
+    const labId = resolveLaboratoryId(req);
     const { exam_type, date_from, date_to, section = 'all' } = req.query;
 
     if (exam_type && !VALID_EXAM_TYPES.includes(exam_type)) {
@@ -48,26 +54,11 @@ export async function getCaseArchiveSearch(req, res, next) {
       });
     }
 
-    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-
-    if (date_from && !datePattern.test(date_from)) {
+    const dateRangeError = validateDateRange(date_from, date_to);
+    if (dateRangeError) {
       return res.status(400).json({
         success: false,
-        message: 'Format de date invalide. Utilisez YYYY-MM-DD.',
-      });
-    }
-
-    if (date_to && !datePattern.test(date_to)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Format de date invalide. Utilisez YYYY-MM-DD.',
-      });
-    }
-
-    if (date_from && date_to && date_from > date_to) {
-      return res.status(400).json({
-        success: false,
-        message: 'La date de début doit être antérieure ou égale à la date de fin.',
+        message: dateRangeError,
       });
     }
 
@@ -87,16 +78,16 @@ export async function getCaseArchiveSearch(req, res, next) {
     let sourceKeywords = [];
 
     if (req.query.source_exam_id !== undefined) {
-      sourceExamId = Number(req.query.source_exam_id);
+      sourceExamId = parsePositiveInteger(req.query.source_exam_id);
 
-      if (!Number.isInteger(sourceExamId) || sourceExamId <= 0) {
+      if (!sourceExamId) {
         return res.status(400).json({
           success: false,
           message: 'Identifiant du prélèvement source invalide.',
         });
       }
 
-      const sourceExam = await findExamById(sourceExamId);
+      const sourceExam = await findExamById(sourceExamId, labId);
 
       if (!sourceExam) {
         return res.status(404).json({
@@ -110,7 +101,7 @@ export async function getCaseArchiveSearch(req, res, next) {
     }
 
     const results = await searchCaseArchive({
-      laboratory_id: 1,
+      laboratory_id: labId,
       q: req.query.q?.trim() ?? '',
       section,
       exam_type,
@@ -133,16 +124,17 @@ export async function getCaseArchiveSearch(req, res, next) {
 
 export async function getCaseArchivePreview(req, res, next) {
   try {
-    const examId = Number(req.params.id);
+    const labId = resolveLaboratoryId(req);
+    const examId = parsePositiveInteger(req.params.id);
 
-    if (!Number.isInteger(examId) || examId <= 0) {
+    if (!examId) {
       return res.status(400).json({
         success: false,
         message: 'Identifiant du cas archivé invalide.',
       });
     }
 
-    const preview = await findCaseArchivePreviewByExamId(1, examId);
+    const preview = await findCaseArchivePreviewByExamId(labId, examId);
 
     if (!preview) {
       return res.status(404).json({

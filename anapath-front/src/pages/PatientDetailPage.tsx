@@ -273,6 +273,20 @@ export function PatientDetailPage() {
                   </select>
                 </FormField>
 
+                <FormField
+                  label="Date de naissance"
+                  htmlFor="birth_date"
+                  helperText="Non modifiable après création."
+                >
+                  <input
+                    id="birth_date"
+                    type="date"
+                    value={patient.birth_date ?? ''}
+                    disabled
+                    readOnly
+                  />
+                </FormField>
+
                 <FormField label="Téléphone" htmlFor="phone">
                   <input
                     id="phone"

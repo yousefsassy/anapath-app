@@ -1,77 +1,122 @@
-# Anapath Frontend (V1)
+# Anapath Frontend
 
-Frontend application for an anatomopathology laboratory workflow, built with React + Vite + TypeScript.
+React + Vite + TypeScript frontend for the Anapath pathology workflow app.
 
-## Tech Stack
+For the full product overview and detailed feature description, see the root [README](../README.md).  
+For the technical source of truth across the whole repo, see root [CLAUDE.md](../CLAUDE.md).
+
+## Stack
 
 - React 19
 - Vite 8
 - TypeScript
-- React Router (navigation and protected routes)
-- CSS (custom variables, no component library)
+- React Router
+- custom CSS
 
-## Getting Started
+## What this package is responsible for
 
-### 1) Install dependencies
+The frontend provides:
+- login and protected navigation
+- dashboard/work queue
+- patient directory and patient detail
+- patient creation
+- exam creation
+- case workspace
+- print preview / PDF export
+- templates management
+- settings
+- archive search
+- contextual `Cas similaires`
 
-```bash
-npm install
-```
+## Main routes
 
-### 2) Run development server
+- `/login`
+- `/dashboard`
+- `/archive`
+- `/patients`
+- `/patients/new`
+- `/patients/:id`
+- `/patients/:id/exams/new`
+- `/exams/:id`
+- `/exams/:id/print`
+- `/templates`
+- `/settings`
 
-```bash
-npm run dev
-```
-
-The app is usually available at `http://localhost:5173`. Requires the backend running on port 5000.
-
-### 3) TypeScript check
-
-```bash
-npx tsc --noEmit
-```
-
-### 4) Production build
-
-```bash
-npm run build
-```
-
-## Pages and Routes
-
-| Route | Purpose |
-|-------|---------|
-| `/login` | Credential form (authenticates against backend) |
-| `/dashboard` | Accueil / file de travail — status tabs + search + exam type filter + exam table |
-| `/patients` | Patient directory with inline prélèvements per row, text search, sex filter |
-| `/patients/new` | Create patient form with duplicate detection |
-| `/patients/:id` | Patient detail + prélèvements history with conclusion previews |
-| `/patients/:id/exams/new` | Register new prélèvement |
-| `/exams/:id` | Main case workspace — metadata, antécédents, compte rendu, status actions |
-| `/templates` | Manage report templates (create, edit, delete) |
-
-## Project Structure
+## Project structure
 
 ```text
 src/
-  components/   # Shared UI (PageHeader, StatusBadge, FormField)
-  context/      # AuthContext
-  layouts/      # MainLayout + Sidebar
-  pages/        # Route-level page components
-  routes/       # ProtectedRoute wrapper
-  services/     # API service layer (apiClient, patientService, examService, authService, reportTemplateService)
-  types/        # TypeScript domain types (domain.ts)
-  utils/        # formatting.ts (formatDate, truncate), domainMappings.ts (status labels, sex display)
+  App.tsx
+  components/
+  context/
+  hooks/
+  layouts/
+  pages/
+  pages/exam-detail/
+  routes/
+  services/
+  test/
+  types/
+  utils/
 ```
 
-## Key Utilities
+## Useful scripts
 
-- `utils/formatting.ts` — `formatDate(value)` → `dd/mm/yyyy` or `—`, `truncate(text, max)` → truncated with `…`
-- `utils/domainMappings.ts` — `getStatusLabel(status)`, `displaySexFrench(value)`
+```bash
+npm install
+npm run dev
+npm run build
+npm test
+npx tsc --noEmit
+```
 
-## Notes
+## Frontend notes
 
-- All UI labels are in French. DB/API canonical values (`registered`, `in_progress`, `completed`) are never renamed — translation is display-only.
-- Authentication is backed by PostgreSQL (`users` table); token stored in localStorage. Auth middleware is placeholder only (no JWT verification on protected routes).
-- For full project context, see root `CLAUDE.md`.
+- The UI is in French.
+- Canonical DB/API values stay in English (`registered`, `in_progress`, `completed`).
+- `ExamPrintPage` is standalone and intentionally outside the sidebar layout.
+- `apiClient.ts` injects the auth token placeholder and `X-Laboratory-Id`.
+- `examService.getWorkspaceByExamId()` explicitly loads `Exam` then `Report`; there is no dedicated backend workspace endpoint.
+- `DashboardPage` has stale-request protection so slow previous requests do not overwrite the latest filter state.
+
+## Main pages
+
+- `DashboardPage` — work queue with stats, filters, urgency, and keyword search
+- `ArchivePage` — validated-case archive and advanced search
+- `PatientsListPage` — annuaire-style patient directory
+- `PatientDetailPage` — patient record and exam history
+- `NewExamPage` — prélèvement registration form
+- `ExamDetailPage` — main dossier workspace
+- `ExamPrintPage` — print preview and PDF export
+- `TemplatesPage` — report template management
+- `SettingsPage` — lab/doctor print identity settings
+
+## Frontend tests
+
+Minimal smoke tests are present in:
+
+- [src/test/ExamPrintPage.test.tsx](src/test/ExamPrintPage.test.tsx)
+
+They cover:
+- draft print rendering
+- validated print rendering
+
+Run with:
+
+```bash
+npm test
+```
+
+## Dependencies
+
+- Requires the backend running on port `5000`
+- Uses `VITE_API_BASE_URL` for API access
+- Stores auth placeholder session and print/lab settings in localStorage
+
+## Known frontend limitations
+
+- auth UX is backed by a placeholder auth system
+- no pagination on list pages
+- no URL-persisted dashboard filters
+- PDF generation is client-side only
+- lab settings are local to the browser via localStorage

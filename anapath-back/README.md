@@ -1,16 +1,32 @@
 # Anapath Backend
 
-Express + PostgreSQL backend for the Anapath anatomopathology workflow app.
+Express + PostgreSQL backend for the Anapath doctor workflow app.
+
+For the full product overview, feature map, and workflow description, see the root [README](../README.md).  
+For the technical source of truth across the whole repo, see root [CLAUDE.md](../CLAUDE.md).
 
 ## Stack
 
-- Node.js + Express
-- PostgreSQL with plain SQL (`pg`)
-- Database-backed exam number generation via `exam_sequences`
+- Node.js
+- Express
+- PostgreSQL
+- plain SQL through `pg`
+
+## What this package is responsible for
+
+The backend provides:
+- placeholder login
+- patient CRUD
+- patient exam history
+- exam list/detail/create/update
+- report load/save with lock on validated exams
+- report template CRUD
+- lab-scoped dashboard stats
+- case archive search and preview
 
 ## Project structure
 
-```
+```text
 anapath-back/
 ├── src/
 │   ├── app.js
@@ -20,25 +36,28 @@ anapath-back/
 │   ├── db/
 │   │   ├── queries.js
 │   │   ├── schema.sql
-│   │   └── seed.sql
-│   ├── data/
-│   │   └── mockData.js (kept for reference, not used)
+│   │   ├── seed.sql
+│   │   ├── archive_profile_fixture.sql
+│   │   ├── archive_profile_explain.sql
+│   │   └── archive_profile_results.md
 │   ├── middlewares/
-│   ├── models/
-│   └── routes/
+│   ├── routes/
+│   └── utils/
+├── tests/
+│   └── api.contract.test.js
 ├── server.js
 ├── .env.example
 └── package.json
 ```
 
-## 1) Install and configure
+## Install and configure
 
 ```bash
 npm install
 cp .env.example .env
 ```
 
-Edit `.env` if needed:
+Example `.env`:
 
 ```env
 PORT=5000
@@ -49,61 +68,48 @@ DB_PASSWORD=your_password
 DB_NAME=anapath
 ```
 
-## 2) Create database and tables
+## Database setup
 
-This project includes SQL files, but **you still need to execute them**.
-
-### Create database object
+Create the database if needed:
 
 ```bash
 createdb anapath
 ```
 
-### Create tables (schema)
+Apply schema:
 
 ```bash
 psql -d anapath -f src/db/schema.sql
 ```
 
-### Insert seed data
+Load seed data:
 
 ```bash
 psql -d anapath -f src/db/seed.sql
 ```
 
-After these commands, you can open pgAdmin and see the tables:
-- `laboratories`
-- `users`
-- `patients`
-- `exams`
-- `reports`
-- `exam_sequences`
-- `report_templates`
-
-## 3) Start backend
+## Useful scripts
 
 ```bash
 npm run dev
-```
-
-or
-
-```bash
 npm start
+npm test
+npm run db:schema
+npm run db:seed
 ```
 
-The server log prints the URL to test.
-
-## API endpoints
+## Main API routes
 
 - `GET /api/health`
-- `POST /api/auth/login` (placeholder)
+- `POST /api/auth/login`
 - `GET /api/patients`
 - `POST /api/patients`
+- `GET /api/patients/search`
 - `GET /api/patients/:id`
 - `PUT /api/patients/:id`
-- `GET /api/patients/:id/exams` — accepts `?include=report_summary` to join report conclusion per exam
-- `GET /api/exams` — accepts `?status=`, `?exam_type=`, `?search=` filters (all optional, ANDed)
+- `GET /api/patients/:id/exams`
+- `GET /api/exams`
+- `GET /api/exams/stats`
 - `POST /api/exams`
 - `GET /api/exams/:id`
 - `PUT /api/exams/:id`
@@ -113,54 +119,63 @@ The server log prints the URL to test.
 - `POST /api/report-templates`
 - `PUT /api/report-templates/:id`
 - `DELETE /api/report-templates/:id`
+- `GET /api/case-archive/search`
+- `GET /api/case-archive/:id/preview`
 
-## Exam number logic (persistent)
+## Important backend rules
 
-Stored in table `exam_sequences` by `(laboratory_id, exam_type)`:
+- All responses follow `{ success, message?, data }`.
+- User-facing API messages are in French.
+- Authenticated requests are lab-scoped through `X-Laboratory-Id`.
+- `GET /api/exams/stats` must stay registered before `GET /api/exams/:id`.
+- Exam creation auto-creates the linked report.
+- Report updates are blocked when `exam.status === 'completed'`.
+- Once an exam is already `completed`, direct metadata correction is blocked.
+- The only allowed post-validation mutation is `status: 'in_progress'` to reopen the case.
+- Reopening clears `result_issued_date`.
 
-- Cytology: `C0001-2026`
-- Histology: `1-2026`
+## Tests
 
-This no longer resets when server restarts.
+Minimal backend contract tests are present in:
 
-## Example payloads
+- [tests/api.contract.test.js](tests/api.contract.test.js)
 
-### POST `/api/patients`
+They cover:
+- patient creation
+- exam creation
+- report load/save
+- validation / reopen
+- template CRUD
+- archive search
+- archive preview
 
-```json
-{
-  "first_name": "Sara",
-  "last_name": "Amrani",
-  "age": 52,
-  "sex": "F",
-  "phone": "0611223344",
-  "general_history": "Diabetes"
-}
+Run them with:
+
+```bash
+npm test
 ```
 
-### POST `/api/exams`
+The suite runs against the configured PostgreSQL database, creates a temporary dedicated laboratory, and cleans up automatically.
 
-```json
-{
-  "patient_id": 1,
-  "exam_type": "histology",
-  "clinic_name": "Central Clinic",
-  "requesting_doctor": "Dr. Karim",
-  "requested_date": "2026-03-22",
-  "sample_nature": "Biopsy",
-  "exam_history": "Second check",
-  "diagnosis_keywords": ["tumor", "biopsy"],
-  "status": "registered"
-}
+## Archive profiling
+
+Profiling assets are in:
+- [archive_profile_fixture.sql](src/db/archive_profile_fixture.sql)
+- [archive_profile_explain.sql](src/db/archive_profile_explain.sql)
+- [archive_profile_results.md](src/db/archive_profile_results.md)
+
+Run locally:
+
+```bash
+psql -d anapath -f src/db/archive_profile_fixture.sql
+psql -d anapath -f src/db/archive_profile_explain.sql
 ```
 
-### PUT `/api/reports/:examId`
+## Known backend limitations
 
-```json
-{
-  "clinical_info": "Patient has persistent pain",
-  "macroscopy": "Sample measures 2cm",
-  "microscopy": "Cellular atypia observed",
-  "conclusion": "Suspicious lesion, recommend follow-up"
-}
-```
+- auth is still placeholder
+- no JWT verification middleware
+- no RBAC
+- no pagination
+- no audit trail/version history for reports
+- archive search stays on PostgreSQL full-text search, with no external search engine

@@ -1,6 +1,5 @@
 import type { ReportTemplate } from '../types/domain'
-import { apiClient } from './apiClient'
-import { authService } from './authService'
+import { ApiClientError, apiClient } from './apiClient'
 
 interface TemplatePayload {
   name: string
@@ -12,25 +11,18 @@ interface TemplatePayload {
 
 export const reportTemplateService = {
   list: async (): Promise<ReportTemplate[]> => {
-    const authUser = authService.getCurrentUser()
-    const labId = authUser?.laboratory_id ?? 1
-    return apiClient.get<ReportTemplate[]>(`/report-templates?laboratory_id=${labId}`)
+    return apiClient.get<ReportTemplate[]>('/report-templates')
   },
 
   create: async (payload: TemplatePayload): Promise<ReportTemplate> => {
-    const authUser = authService.getCurrentUser()
-    return apiClient.post<ReportTemplate>('/report-templates', {
-      ...payload,
-      laboratory_id: authUser?.laboratory_id ?? 1,
-    })
+    return apiClient.post<ReportTemplate>('/report-templates', payload)
   },
 
   update: async (id: number, payload: Partial<TemplatePayload>): Promise<ReportTemplate | null> => {
     try {
       return await apiClient.put<ReportTemplate>(`/report-templates/${id}`, payload)
     } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      if (message.toLowerCase().includes('introuvable')) return null
+      if (error instanceof ApiClientError && error.status === 404) return null
       throw error
     }
   },

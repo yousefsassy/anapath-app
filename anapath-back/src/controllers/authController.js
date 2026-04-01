@@ -6,7 +6,7 @@ export async function login(req, res, next) {
   if (!email || !password) {
     return res.status(400).json({
       success: false,
-      message: 'email and password are required',
+      message: "Adresse e-mail et mot de passe obligatoires.",
     });
   }
 
@@ -16,13 +16,13 @@ export async function login(req, res, next) {
     if (!user || user.password_hash !== password) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials',
+        message: 'Identifiants invalides.',
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: 'Login successful (placeholder auth)',
+      message: 'Connexion réussie.',
       data: {
         id: user.id,
         laboratory_id: user.laboratory_id,
