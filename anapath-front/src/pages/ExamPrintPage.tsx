@@ -314,6 +314,10 @@ export function ExamPrintPage() {
                 {patient?.age ?? '—'}
               </p>
               <p>
+                <span className="print-meta-label">Date de naissance :</span>{' '}
+                {formatDate(patient?.birth_date ?? null)}
+              </p>
+              <p>
                 <span className="print-meta-label">Sexe :</span>{' '}
                 {patient?.sex ? displaySexFrench(patient.sex) : '—'}
               </p>

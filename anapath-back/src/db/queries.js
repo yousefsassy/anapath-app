@@ -143,6 +143,11 @@ export async function findAllExams(filters = {}) {
     conditions.push(`e.registered_date <= $${params.length}`);
   }
 
+  if (filters.keyword) {
+    params.push(filters.keyword);
+    conditions.push(`EXISTS (SELECT 1 FROM unnest(e.diagnosis_keywords) AS k WHERE k ILIKE $${params.length})`);
+  }
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const result = await query(
     `${baseQuery} ${whereClause} ORDER BY e.urgent DESC, e.created_at DESC`,

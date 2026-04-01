@@ -301,6 +301,9 @@ export function PatientDetailPage() {
                 <strong>Âge :</strong> {patient.age} ans
               </p>
               <p>
+                <strong>Date de naissance :</strong> {formatDate(patient.birth_date)}
+              </p>
+              <p>
                 <strong>Sexe :</strong> {displaySexFrench(patient.sex)}
               </p>
               <p>

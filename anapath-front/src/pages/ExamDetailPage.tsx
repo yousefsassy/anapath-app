@@ -629,7 +629,15 @@ export function ExamDetailPage() {
               </div>
               <div className="exam-detail-meta-item exam-detail-meta-item--full">
                 <dt>Mots-clés diagnostiques</dt>
-                <dd>{formatDiagnosisKeywords(exam.diagnosis_keywords)}</dd>
+                <dd>
+                  {Array.isArray(exam.diagnosis_keywords) && exam.diagnosis_keywords.length > 0 ? (
+                    <span className="keyword-chips">
+                      {exam.diagnosis_keywords.map((kw) => (
+                        <span key={kw} className="keyword-chip">{kw}</span>
+                      ))}
+                    </span>
+                  ) : '—'}
+                </dd>
               </div>
             </dl>
           )}

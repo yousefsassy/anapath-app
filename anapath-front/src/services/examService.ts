@@ -70,6 +70,7 @@ export interface ExamListFilters {
   search?: string
   date_from?: string  // YYYY-MM-DD
   date_to?: string    // YYYY-MM-DD
+  keyword?: string
 }
 
 export const examService = {
@@ -84,6 +85,7 @@ export const examService = {
     if (filters.search?.trim()) params.set('search', filters.search.trim())
     if (filters.date_from) params.set('date_from', filters.date_from)
     if (filters.date_to) params.set('date_to', filters.date_to)
+    if (filters.keyword?.trim()) params.set('keyword', filters.keyword.trim())
     const qs = params.toString()
     return apiClient.get<Exam[]>(qs ? `/exams?${qs}` : '/exams')
   },

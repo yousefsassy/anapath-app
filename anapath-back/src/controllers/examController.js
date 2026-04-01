@@ -80,6 +80,7 @@ export async function getExams(req, res, next) {
       ...(req.query.search?.trim() ? { search: req.query.search.trim() } : {}),
       ...(req.query.date_from ? { date_from: req.query.date_from } : {}),
       ...(req.query.date_to ? { date_to: req.query.date_to } : {}),
+      ...(req.query.keyword?.trim() ? { keyword: req.query.keyword.trim() } : {}),
     };
     const exams = await findAllExams(filters);
     return res.status(200).json({ success: true, data: exams });

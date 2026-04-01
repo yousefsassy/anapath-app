@@ -84,7 +84,7 @@ anapath-app/
 | GET | `/api/patients/:id` | Patient detail |
 | PUT | `/api/patients/:id` | Update patient (editable fields only) |
 | GET | `/api/patients/:id/exams` | Patient's exams. Accepts `?include=report_summary` to JOIN reports |
-| GET | `/api/exams` | All exams, `urgent DESC, created_at DESC`. Accepts `?status=`, `?exam_type=`, `?search=`, `?date_from=`, `?date_to=` filters |
+| GET | `/api/exams` | All exams, `urgent DESC, created_at DESC`. Accepts `?status=`, `?exam_type=`, `?search=`, `?date_from=`, `?date_to=`, `?keyword=` filters |
 | GET | `/api/exams/stats` | Aggregate counts: registered, in_progress, completed this calendar month. **Must be registered before `/:id` in examRoutes.js.** |
 | POST | `/api/exams` | Create exam (triggers `exam_sequences` transaction, auto-creates empty report) |
 | GET | `/api/exams/:id` | Exam detail |
@@ -108,6 +108,7 @@ anapath-app/
 - `?search=<term>` — ILIKE partial match on patient last name, first name, `exam_number`, `sample_nature`
 - `?date_from=YYYY-MM-DD` — filters `registered_date >= date_from`; returns 400 if format invalid
 - `?date_to=YYYY-MM-DD` — filters `registered_date <= date_to`; returns 400 if format invalid or `date_from > date_to`
+- `?keyword=<term>` — case-insensitive exact match against any element of `diagnosis_keywords[]` (PostgreSQL `unnest` + ILIKE); no 400 validation
 - All filters AND-combined at SQL level in `findAllExams(filters)`
 - Results ordered `urgent DESC, created_at DESC`
 
@@ -176,7 +177,7 @@ ReportTemplate                    standalone — not linked to patient or exam
 
 ### Services
 - `examService.ts` — `getStats()`, `list(filters)`, `getById`, `create`, `update`, `updateStatus`, `getReportByExamId`, `saveReportByExamId`
-  - `ExamListFilters = { status?, exam_type?, search?, date_from?, date_to? }` — all optional, passed as query params
+  - `ExamListFilters = { status?, exam_type?, search?, date_from?, date_to?, keyword? }` — all optional, passed as query params
   - `getStats()` → `GET /api/exams/stats` → `ExamStats`
   - `updateStatus(id, status)` is reused for both forward transitions and reopen (`in_progress`)
 - `patientService.ts` — `list`, `getById`, `create`, `update`, `search`, `getExamsByPatientId`, `getExamsWithReportSummary`
@@ -221,14 +222,16 @@ ReportTemplate                    standalone — not linked to patient or exam
 - **Stats strip** (above the work queue panel): 3 stat cards — Enregistrés, En cours, Validés ce mois. Fetched once on mount from `GET /api/exams/stats`. Global — not tied to any active filter.
 - Status filter tabs: Tous / Enregistré / En cours / Validé
 - Text search bar: patient name, exam number, sample nature (debounced 300ms, server-side ILIKE)
-- **Date range filter**: Du / Au date pickers — filter on `registered_date`. Both optional; AND-combined with other filters. "✕ Effacer" resets search + type + dates without touching the active status tab.
+- **Date range filter**: Du / Au date pickers — filter on `registered_date`. Both optional; AND-combined with other filters. "✕ Effacer" resets search + type + dates + keyword without touching the active status tab.
 - Exam type segmented control: Tous / Histologie / Cytologie (server-side)
+- **Keyword filter**: "Mot-clé" text input (debounced 300ms) — filters by `diagnosis_keywords` array match (server-side, case-insensitive). Included in "✕ Effacer" clear action.
 - Exam list ordered `urgent DESC, created_at DESC` — urgent exams always surface first within each filter.
 - Urgent exams show a red `Urgent` badge (`.badge--urgent`) in the Réf. Prélèvement column.
 
 ### Patient workflow
 - Patient list: inline prélèvements per row (lazy loaded, cached per toggle), sex filter, text search
 - Patient detail: exams table shows conclusion preview (first 120 chars from report)
+- Patient detail: shows `birth_date` (Date de naissance) in view mode, formatted via `formatDate()`. Read-only — not editable (backend blocks `birth_date` updates in `updatePatient`).
 - Duplicate detection on creation: warns if same name exists, requires explicit confirmation to proceed
 
 ### Exam workspace
@@ -236,6 +239,7 @@ ReportTemplate                    standalone — not linked to patient or exam
 - 4-section compte rendu editor with explicit save
 - Status action buttons with workflow-appropriate labels
 - **Urgent flag**: checkbox "Prélèvement urgent" visible in both NewExamPage and ExamDetailPage edit mode. Displayed as a badge in view mode. Stored as `BOOLEAN NOT NULL DEFAULT FALSE` in DB. Affects list ordering (urgent exams sort first).
+- **Diagnosis keywords**: displayed as chips (`.keyword-chip`) in view mode. Comma-separated textarea in edit mode. Stored as `TEXT[]` in DB; chips only render when the array is non-empty.
 
 ### Report templates
 - `TemplatesPage` at `/templates`
@@ -263,7 +267,7 @@ ReportTemplate                    standalone — not linked to patient or exam
   - `fontSize`: `small` | `normal` (default) | `large`
   - Reset button returns all to defaults
 - `buildSheetClasses()` translates the settings object into CSS modifier classes on the `.print-sheet` element (e.g. `print-sheet--spacing-compact`, `print-sheet--label-bold`, `print-sheet--conclusion-plain`, `print-sheet--font-small`). The `.print-sheet--exporting` class is added just before `html2pdf` capture to suppress screen-only chrome.
-- Document structure: entête → exam block → report sections (only rendered if section has content) → signature footer
+- Document structure: entête → exam block (patient meta includes birth_date) → report sections (only rendered if section has content) → signature footer
 - Header: tries `/entete-compte-rendu.png` from `/public` first; falls back to configured text identity
 
 ### Lab/doctor settings
@@ -286,8 +290,6 @@ ReportTemplate                    standalone — not linked to patient or exam
 - **No report audit trail** — reopen works but leaves no trace beyond `updated_at` timestamps. No version history, no recovery of overwritten text.
 - **No CIN field on patients** — requires schema migration; deferred
 - **No URL-based filter persistence** — Accueil filters reset on page reload; deferred
-- **`diagnosis_keywords`** — stored as `TEXT[]` in DB, accepted in create/update, shown in edit mode — but never displayed as tags and never filterable from the dashboard
-- **`birth_date`** — stored in DB, returned by API, but never displayed in any UI page or on the printed PDF
 - **Multi-tenancy** — `laboratories` table supports it; backend hardcodes `laboratory_id = 1` everywhere
 - **Dashboard stats not filter-responsive** — the 3 stat cards always show global lab totals regardless of active status tab, search, date range, or exam type. Intentional by design.
 - **Dashboard stats not auto-refreshed** — fetched once on page mount. If an exam is completed in another tab, stats are stale until page reload.

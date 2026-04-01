@@ -33,6 +33,8 @@ export function DashboardPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [keywordSearch, setKeywordSearch] = useState('')
+  const [debouncedKeyword, setDebouncedKeyword] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -46,6 +48,11 @@ export function DashboardPage() {
   }, [searchTerm])
 
   useEffect(() => {
+    const timer = setTimeout(() => setDebouncedKeyword(keywordSearch), 300)
+    return () => clearTimeout(timer)
+  }, [keywordSearch])
+
+  useEffect(() => {
     const loadExams = async () => {
       setLoading(true)
       setError(null)
@@ -56,6 +63,7 @@ export function DashboardPage() {
           search: debouncedSearch.trim() || undefined,
           ...(dateFrom ? { date_from: dateFrom } : {}),
           ...(dateTo ? { date_to: dateTo } : {}),
+          ...(debouncedKeyword.trim() ? { keyword: debouncedKeyword.trim() } : {}),
         })
         setExams(data)
       } catch {
@@ -66,15 +74,16 @@ export function DashboardPage() {
     }
 
     void loadExams()
-  }, [activeFilter, examTypeFilter, debouncedSearch, dateFrom, dateTo])
+  }, [activeFilter, examTypeFilter, debouncedSearch, dateFrom, dateTo, debouncedKeyword])
 
-  const hasActiveFilters = searchTerm !== '' || examTypeFilter !== 'all' || dateFrom !== '' || dateTo !== ''
+  const hasActiveFilters = searchTerm !== '' || examTypeFilter !== 'all' || dateFrom !== '' || dateTo !== '' || keywordSearch !== ''
 
   const clearFilters = () => {
     setSearchTerm('')
     setExamTypeFilter('all')
     setDateFrom('')
     setDateTo('')
+    setKeywordSearch('')
   }
 
   return (
@@ -158,6 +167,17 @@ export function DashboardPage() {
               />
             </label>
           </div>
+
+          <label className="accueil-date-label">
+            Mot-clé
+            <input
+              type="text"
+              className="accueil-date-input accueil-keyword-input"
+              placeholder="ex: carcinome"
+              value={keywordSearch}
+              onChange={(e) => setKeywordSearch(e.target.value)}
+            />
+          </label>
 
           <div className="accueil-type-segmented">
             {EXAM_TYPE_BUTTONS.map((btn) => (
