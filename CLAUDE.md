@@ -93,6 +93,7 @@ anapath-app/
 | GET | `/api/reports/:examId` | Exam's report |
 | PUT | `/api/reports/:examId` | Update report. **Returns 403** if exam status is `completed`. Auto-creates report row if missing. |
 | GET | `/api/case-archive/search` | Search validated cases across exam metadata + report text. Accepts `?q=`, `?section=`, `?exam_type=`, `?date_from=`, `?date_to=`, `?source_exam_id=`, `?limit=` |
+| GET | `/api/case-archive/:id/preview` | Read-only preview payload for an archived validated case (exam metadata + 4-section report) |
 | GET | `/api/report-templates` | List all templates for lab |
 | POST | `/api/report-templates` | Create template |
 | PUT | `/api/report-templates/:id` | Update template |
@@ -196,6 +197,7 @@ ReportTemplate                    standalone — not linked to patient or exam
 - `caseArchiveService.ts` — `search(query)`
   - `CaseArchiveQuery = { q?, section?, exam_type?, date_from?, date_to?, source_exam_id?, limit? }`
   - `search()` → `GET /api/case-archive/search`
+  - `getPreview(id)` → `GET /api/case-archive/:id/preview`
 - `patientService.ts` — `list`, `getById`, `create`, `update`, `search`, `getExamsByPatientId`, `getExamsWithReportSummary`
 - `reportTemplateService.ts` — `list`, `create`, `update`, `remove`
 - `printSettingsStorage.ts` — `loadPrintSettings()`, `savePrintSettings()` — localStorage key `anapath_print_settings`
@@ -211,6 +213,7 @@ ReportTemplate                    standalone — not linked to patient or exam
 - `ExamWithReportSummary` — extends `Exam` with `report_summary: ReportSummary | null`
 - `ExamStats { registered_count: number, in_progress_count: number, completed_this_month: number }`
 - `CaseArchiveQuery`, `CaseArchiveResult`, `CaseArchiveSection`, `CaseArchiveMatchReason`
+- `CaseArchivePreview`
 - `Exam` includes optional `patient_first_name?`, `patient_last_name?` (populated by `GET /api/exams` LEFT JOIN)
 - `Exam.urgent: boolean` — present in DB schema, accepted on create/update, affects list ordering
 - `PrintSettings` — `{ sectionSpacing, labelStyle, conclusionStyle, fontSize }` + `defaultPrintSettings`
@@ -256,8 +259,9 @@ ReportTemplate                    standalone — not linked to patient or exam
 - 4-section compte rendu editor with explicit save
 - **Contextual archive lookup:** `Cas similaires` side panel in `ExamDetailPage`
   - Prefilled contextual search from current `sample_nature`, `diagnosis_keywords`, and `exam_history`
+  - Auto-search only runs when enough saved context exists; otherwise the panel shows a guidance state instead of defaulting to generic recent cases
   - Searches validated archive cases with same-type / shared-keyword boosts
-  - Includes section filter, result excerpts, read-only preview, and opens archived cases in a new tab
+  - Includes section filter, result excerpts, a dedicated read-only preview payload, and opens archived cases in a new tab
 - Status action buttons with workflow-appropriate labels
 - **Urgent flag**: checkbox "Prélèvement urgent" visible in both NewExamPage and ExamDetailPage edit mode. Displayed as a badge in view mode. Stored as `BOOLEAN NOT NULL DEFAULT FALSE` in DB. Affects list ordering (urgent exams sort first).
 - **Diagnosis keywords**: displayed as chips (`.keyword-chip`) in view mode. Comma-separated textarea in edit mode. Stored as `TEXT[]` in DB; chips only render when the array is non-empty.

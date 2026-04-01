@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { StatusBadge } from '../StatusBadge'
-import { examService } from '../../services/examService'
-import type { CaseArchiveResult, Exam, ReportInput } from '../../types/domain'
+import { caseArchiveService } from '../../services/caseArchiveService'
+import type { CaseArchivePreview, CaseArchiveResult, ReportInput } from '../../types/domain'
 import { displaySexFrench } from '../../utils/domainMappings'
 import { formatDate, truncate } from '../../utils/formatting'
 
@@ -10,6 +10,7 @@ interface CaseArchiveResultListProps {
   results: CaseArchiveResult[]
   loading: boolean
   error?: string
+  info?: string
   emptyTitle: string
   emptyDescription: string
   compact?: boolean
@@ -17,7 +18,7 @@ interface CaseArchiveResultListProps {
 }
 
 interface ArchivePreviewState {
-  exam: Exam | null
+  exam: CaseArchivePreview['exam'] | null
   report: ReportInput | null
   isLoading: boolean
   error: string
@@ -79,6 +80,7 @@ export function CaseArchiveResultList({
   results,
   loading,
   error = '',
+  info = '',
   emptyTitle,
   emptyDescription,
   compact = false,
@@ -122,20 +124,13 @@ export function CaseArchiveResultList({
     }))
 
     try {
-      const [exam, report] = await Promise.all([
-        examService.getById(examId),
-        examService.getReportByExamId(examId),
-      ])
-
-      if (!exam) {
-        throw new Error('Prélèvement introuvable.')
-      }
+      const preview = await caseArchiveService.getPreview(examId)
 
       setPreviewByExamId((previous) => ({
         ...previous,
         [cacheKey]: {
-          exam,
-          report: report ?? emptyPreviewReport,
+          exam: preview.exam,
+          report: preview.report ?? emptyPreviewReport,
           isLoading: false,
           error: '',
         },
@@ -168,6 +163,14 @@ export function CaseArchiveResultList({
     return (
       <div className="case-archive-state case-archive-state--danger">
         <p className="state-block-title">{error}</p>
+      </div>
+    )
+  }
+
+  if (info && results.length === 0) {
+    return (
+      <div className="case-archive-state">
+        <p className="state-block-title">{info}</p>
       </div>
     )
   }

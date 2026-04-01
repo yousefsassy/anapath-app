@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { CaseArchiveResultList } from '../components/archive/CaseArchiveResultList'
 import { PageContainer } from '../layouts/PageContainer'
@@ -22,6 +22,7 @@ const SECTION_OPTIONS: { value: CaseArchiveSection; label: string }[] = [
 ]
 
 export function ArchivePage() {
+  const requestIdRef = useRef(0)
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [examTypeFilter, setExamTypeFilter] = useState<ArchiveExamTypeFilter>('all')
@@ -38,6 +39,10 @@ export function ArchivePage() {
   }, [searchTerm])
 
   useEffect(() => {
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
+    const controller = new AbortController()
+
     const loadArchive = async () => {
       setIsLoading(true)
       setError('')
@@ -49,20 +54,33 @@ export function ArchivePage() {
           date_from: dateFrom || undefined,
           date_to: dateTo || undefined,
           limit: 24,
-        })
+        }, { signal: controller.signal })
+
+        if (controller.signal.aborted || requestId !== requestIdRef.current) {
+          return
+        }
+
         setResults(data)
       } catch (loadError) {
+        if (controller.signal.aborted || requestId !== requestIdRef.current) {
+          return
+        }
+
         setError(
           loadError instanceof Error
             ? loadError.message
             : "Impossible de charger l'archive des cas."
         )
       } finally {
-        setIsLoading(false)
+        if (!controller.signal.aborted && requestId === requestIdRef.current) {
+          setIsLoading(false)
+        }
       }
     }
 
     void loadArchive()
+
+    return () => controller.abort()
   }, [debouncedSearch, sectionFilter, examTypeFilter, dateFrom, dateTo])
 
   const hasActiveFilters =
@@ -182,10 +200,16 @@ export function ArchivePage() {
         </div>
 
         <div className="archive-results-summary">
-          <strong>{results.length}</strong>
-          <span>
-            cas {results.length > 1 ? 'trouvés' : 'trouvé'}
-          </span>
+          {isLoading ? (
+            <span>Recherche en cours…</span>
+          ) : (
+            <>
+              <strong>{results.length}</strong>
+              <span>
+                cas {results.length > 1 ? 'trouvés' : 'trouvé'}
+              </span>
+            </>
+          )}
         </div>
 
         <CaseArchiveResultList

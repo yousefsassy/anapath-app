@@ -1,4 +1,8 @@
-import { findExamById, searchCaseArchive } from '../db/queries.js';
+import {
+  findCaseArchivePreviewByExamId,
+  findExamById,
+  searchCaseArchive,
+} from '../db/queries.js';
 
 const VALID_EXAM_TYPES = ['histology', 'cytology'];
 const VALID_SECTIONS = ['all', 'clinical_info', 'macroscopy', 'microscopy', 'conclusion'];
@@ -40,7 +44,7 @@ export async function getCaseArchiveSearch(req, res, next) {
     if (section && !VALID_SECTIONS.includes(section)) {
       return res.status(400).json({
         success: false,
-        message: `Section invalide. Valeurs acceptees : ${VALID_SECTIONS.join(', ')}`,
+        message: `Section invalide. Valeurs acceptées : ${VALID_SECTIONS.join(', ')}`,
       });
     }
 
@@ -121,6 +125,35 @@ export async function getCaseArchiveSearch(req, res, next) {
     return res.status(200).json({
       success: true,
       data: results,
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getCaseArchivePreview(req, res, next) {
+  try {
+    const examId = Number(req.params.id);
+
+    if (!Number.isInteger(examId) || examId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant du cas archivé invalide.',
+      });
+    }
+
+    const preview = await findCaseArchivePreviewByExamId(1, examId);
+
+    if (!preview) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cas archivé introuvable.',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: preview,
     });
   } catch (error) {
     return next(error);

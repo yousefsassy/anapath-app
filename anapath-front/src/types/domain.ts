@@ -141,6 +141,11 @@ export interface CaseArchiveResult {
   match_reasons?: CaseArchiveMatchReason[]
 }
 
+export interface CaseArchivePreview {
+  exam: Exam
+  report: ReportInput
+}
+
 export interface ReportTemplate {
   id: number
   laboratory_id: number

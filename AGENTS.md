@@ -36,8 +36,8 @@ anapath-app/
 ├── anapath-back/         Express + PostgreSQL backend
 │   ├── server.js
 │   ├── src/app.js
-│   ├── src/routes/       authRoutes, patientRoutes, examRoutes, reportRoutes, reportTemplateRoutes, healthRoutes
-│   ├── src/controllers/  authController, patientController, examController, reportController, reportTemplateController, healthController
+│   ├── src/routes/       authRoutes, patientRoutes, examRoutes, reportRoutes, reportTemplateRoutes, caseArchiveRoutes, healthRoutes
+│   ├── src/controllers/  authController, patientController, examController, reportController, reportTemplateController, caseArchiveController, healthController
 │   ├── src/db/
 │   │   ├── queries.js    All SQL data access (single file)
 │   │   ├── schema.sql
@@ -57,6 +57,7 @@ anapath-app/
         ├── services/
         │   ├── apiClient.ts            Generic authenticated HTTP client
         │   ├── authService.ts
+        │   ├── caseArchiveService.ts
         │   ├── patientService.ts
         │   ├── examService.ts
         │   ├── reportTemplateService.ts
@@ -91,6 +92,8 @@ anapath-app/
 | PUT | `/api/exams/:id` | Update exam. **Side-effects:** (1) if new status = `completed` and `result_issued_date` is null, auto-sets it to today; (2) if transitioning `completed → in_progress`, clears `result_issued_date` via `clearResultIssuedDateForExam()` |
 | GET | `/api/reports/:examId` | Exam's report |
 | PUT | `/api/reports/:examId` | Update report. **Returns 403** if exam status is `completed`. Auto-creates report row if missing. |
+| GET | `/api/case-archive/search` | Search validated cases across exam metadata + report text. Accepts `?q=`, `?section=`, `?exam_type=`, `?date_from=`, `?date_to=`, `?source_exam_id=`, `?limit=` |
+| GET | `/api/case-archive/:id/preview` | Read-only preview payload for an archived validated case (exam metadata + 4-section report) |
 | GET | `/api/report-templates` | List all templates for lab |
 | POST | `/api/report-templates` | Create template |
 | PUT | `/api/report-templates/:id` | Update template |
@@ -134,11 +137,12 @@ anapath-app/
 |-------|------|-------|
 | `/login` | LoginPage | Credential form |
 | `/dashboard` | DashboardPage | Accueil / file de travail — stats strip + status tabs + search + date range + exam type filter + exam table |
+| `/archive` | ArchivePage | Archive / registry of validated cases — full-text search, section filter, validation date range, contextual previews |
 | `/patients` | PatientsListPage | Patient directory — text search, sex filter, inline exam expansion per row |
 | `/patients/new` | NewPatientPage | Create patient with duplicate detection |
 | `/patients/:id` | PatientDetailPage | Patient info (editable) + exam history with conclusion previews |
 | `/patients/:id/exams/new` | NewExamPage | Register new prélèvement — includes urgent checkbox |
-| `/exams/:id` | ExamDetailPage | Main case workspace — metadata edit (incl. urgent), antécédents, 4-section report, status buttons, report lock/reopen |
+| `/exams/:id` | ExamDetailPage | Main case workspace — metadata edit (incl. urgent), antécédents, contextual `Cas similaires` panel, 4-section report, status buttons, report lock/reopen |
 | `/exams/:id/print` | ExamPrintPage | Print preview + PDF export. **No sidebar.** Opened in new tab from ExamDetailPage. |
 | `/templates` | TemplatesPage | Manage report templates (create, edit, delete, apply) |
 | `/settings` | SettingsPage | Lab/doctor identity settings (doctorName, doctorTitle, phone, email, labName, address) |
@@ -180,6 +184,10 @@ ReportTemplate                    standalone — not linked to patient or exam
   - `ExamListFilters = { status?, exam_type?, search?, date_from?, date_to?, keyword? }` — all optional, passed as query params
   - `getStats()` → `GET /api/exams/stats` → `ExamStats`
   - `updateStatus(id, status)` is reused for both forward transitions and reopen (`in_progress`)
+- `caseArchiveService.ts` — `search(query)`, `getPreview(id)`
+  - `CaseArchiveQuery = { q?, section?, exam_type?, date_from?, date_to?, source_exam_id?, limit? }`
+  - `search()` → `GET /api/case-archive/search`
+  - `getPreview(id)` → `GET /api/case-archive/:id/preview`
 - `patientService.ts` — `list`, `getById`, `create`, `update`, `search`, `getExamsByPatientId`, `getExamsWithReportSummary`
 - `reportTemplateService.ts` — `list`, `create`, `update`, `remove`
 - `printSettingsStorage.ts` — `loadPrintSettings()`, `savePrintSettings()` — localStorage key `anapath_print_settings`
@@ -194,6 +202,7 @@ ReportTemplate                    standalone — not linked to patient or exam
 - `ReportSummary { conclusion, updated_at }`
 - `ExamWithReportSummary` — extends `Exam` with `report_summary: ReportSummary | null`
 - `ExamStats { registered_count: number, in_progress_count: number, completed_this_month: number }`
+- `CaseArchiveQuery`, `CaseArchiveResult`, `CaseArchiveSection`, `CaseArchiveMatchReason`, `CaseArchivePreview`
 - `Exam` includes optional `patient_first_name?`, `patient_last_name?` (populated by `GET /api/exams` LEFT JOIN)
 - `Exam.urgent: boolean` — present in DB schema, accepted on create/update, affects list ordering
 - `PrintSettings` — `{ sectionSpacing, labelStyle, conclusionStyle, fontSize }` + `defaultPrintSettings`
@@ -236,6 +245,11 @@ ReportTemplate                    standalone — not linked to patient or exam
 
 ### Exam workspace
 - Antécédents section: other exams for same patient, with conclusion preview (current exam excluded)
+- **Contextual archive lookup:** `Cas similaires` side panel in `ExamDetailPage`
+  - Prefilled contextual search from current `sample_nature`, `diagnosis_keywords`, and `exam_history`
+  - Auto-search only runs when enough saved context exists; otherwise the panel shows a guidance state instead of defaulting to generic recent cases
+  - Searches validated archive cases with same-type / shared-keyword boosts
+  - Includes section filter, result excerpts, a dedicated read-only preview payload, and opens archived cases in a new tab
 - 4-section compte rendu editor with explicit save
 - Status action buttons with workflow-appropriate labels
 - **Urgent flag**: checkbox "Prélèvement urgent" visible in both NewExamPage and ExamDetailPage edit mode. Displayed as a badge in view mode. Stored as `BOOLEAN NOT NULL DEFAULT FALSE` in DB. Affects list ordering (urgent exams sort first).

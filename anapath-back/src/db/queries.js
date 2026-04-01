@@ -174,6 +174,47 @@ export async function findExamById(examId) {
   return result.rows[0] || null;
 }
 
+export async function findCaseArchivePreviewByExamId(laboratoryId, examId) {
+  const result = await query(
+    `SELECT
+       e.*,
+       r.clinical_info,
+       r.macroscopy,
+       r.microscopy,
+       r.conclusion
+     FROM exams e
+     INNER JOIN reports r ON r.exam_id = e.id
+     WHERE e.laboratory_id = $1
+       AND e.id = $2
+       AND e.status = 'completed'`,
+    [laboratoryId, examId]
+  );
+
+  const row = result.rows[0];
+
+  if (!row) {
+    return null;
+  }
+
+  const {
+    clinical_info,
+    macroscopy,
+    microscopy,
+    conclusion,
+    ...exam
+  } = row;
+
+  return {
+    exam,
+    report: {
+      clinical_info,
+      macroscopy,
+      microscopy,
+      conclusion,
+    },
+  };
+}
+
 export async function updateExamById(examId, payload) {
   const result = await query(
     `UPDATE exams

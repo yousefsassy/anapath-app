@@ -1,8 +1,15 @@
-import type { CaseArchiveQuery, CaseArchiveResult } from '../types/domain'
+import type { CaseArchivePreview, CaseArchiveQuery, CaseArchiveResult } from '../types/domain'
 import { apiClient } from './apiClient'
 
+interface CaseArchiveRequestOptions {
+  signal?: AbortSignal
+}
+
 export const caseArchiveService = {
-  search: async (query: CaseArchiveQuery = {}): Promise<CaseArchiveResult[]> => {
+  search: async (
+    query: CaseArchiveQuery = {},
+    options?: CaseArchiveRequestOptions,
+  ): Promise<CaseArchiveResult[]> => {
     const params = new URLSearchParams()
 
     if (query.q?.trim()) params.set('q', query.q.trim())
@@ -15,7 +22,15 @@ export const caseArchiveService = {
 
     const qs = params.toString()
     return apiClient.get<CaseArchiveResult[]>(
-      qs ? `/case-archive/search?${qs}` : '/case-archive/search'
+      qs ? `/case-archive/search?${qs}` : '/case-archive/search',
+      options,
     )
+  },
+
+  getPreview: async (
+    examId: number | string,
+    options?: CaseArchiveRequestOptions,
+  ): Promise<CaseArchivePreview> => {
+    return apiClient.get<CaseArchivePreview>(`/case-archive/${examId}/preview`, options)
   },
 }

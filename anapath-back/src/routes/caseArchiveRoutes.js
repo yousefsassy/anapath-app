@@ -1,8 +1,12 @@
 import { Router } from 'express';
-import { getCaseArchiveSearch } from '../controllers/caseArchiveController.js';
+import {
+  getCaseArchivePreview,
+  getCaseArchiveSearch,
+} from '../controllers/caseArchiveController.js';
 
 const router = Router();
 
 router.get('/search', getCaseArchiveSearch);
+router.get('/:id/preview', getCaseArchivePreview);
 
 export default router;

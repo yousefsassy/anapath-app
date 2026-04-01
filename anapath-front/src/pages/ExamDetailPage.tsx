@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { FormField } from '../components/FormField'
@@ -50,23 +50,62 @@ function toArchiveSearchToken(value: string): string {
   return sanitized.includes(' ') ? `"${sanitized}"` : sanitized
 }
 
+const ARCHIVE_CONTEXT_STOP_WORDS = new Set([
+  'avec',
+  'chez',
+  'dans',
+  'des',
+  'du',
+  'elle',
+  'elles',
+  'entre',
+  'est',
+  'les',
+  'leur',
+  'leurs',
+  'mais',
+  'meme',
+  'nous',
+  'notre',
+  'par',
+  'pas',
+  'pour',
+  'que',
+  'qui',
+  'sans',
+  'ses',
+  'sur',
+  'une',
+  'vous',
+])
+
+function tokenizeArchiveContext(value: string | null | undefined, maxTerms: number): string[] {
+  if (!value) return []
+
+  return [...new Set(
+    value
+      .toLowerCase()
+      .split(/[^A-Za-zÀ-ÿ0-9]+/)
+      .map((term) => term.trim())
+      .filter((term) => term.length >= 4 && !ARCHIVE_CONTEXT_STOP_WORDS.has(term))
+  )].slice(0, maxTerms)
+}
+
 function buildArchiveContextQuery(exam: Exam): string {
   const diagnosisKeywords = toDiagnosisKeywordsArray(exam.diagnosis_keywords)
-    .slice(0, 3)
+    .flatMap((keyword) => tokenizeArchiveContext(keyword, 2))
+
+  const sampleNatureTerms = tokenizeArchiveContext(exam.sample_nature, 2)
+  const historyTerms = tokenizeArchiveContext(exam.exam_history, 1)
+
+  return [...new Set([
+    ...diagnosisKeywords,
+    ...sampleNatureTerms,
+    ...historyTerms,
+  ])]
+    .slice(0, 4)
     .map(toArchiveSearchToken)
-    .filter(Boolean)
-
-  const historyTerms = exam.exam_history
-    .split(/[^A-Za-zÀ-ÿ0-9]+/)
-    .map((term) => term.trim())
-    .filter((term, index, terms) => term.length >= 4 && terms.indexOf(term) === index)
-    .slice(0, 2)
-    .map(toArchiveSearchToken)
-    .filter(Boolean)
-
-  const sampleNature = toArchiveSearchToken(exam.sample_nature ?? '')
-
-  return [...new Set([sampleNature, ...diagnosisKeywords, ...historyTerms].filter(Boolean))].join(' OR ')
+    .join(' ')
 }
 
 function toExamEditForm(exam: Exam): UpdateExamInput {
@@ -121,10 +160,15 @@ const ARCHIVE_SECTION_OPTIONS: { value: CaseArchiveSection; label: string }[] = 
   { value: 'clinical_info', label: 'RC' },
 ]
 
+const SIMILAR_CASES_CONTEXT_HINT =
+  "Ajoutez une nature du prélèvement, un mot-clé diagnostique ou un renseignement clinique pour obtenir des cas similaires."
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 export function ExamDetailPage() {
   const { id = '' } = useParams()
+  const similarCasesAbortRef = useRef<AbortController | null>(null)
+  const similarCasesRequestIdRef = useRef(0)
 
   const [exam, setExam] = useState<Exam | null>(null)
   const [report, setReport] = useState<ReportInput>(emptyReport)
@@ -143,6 +187,7 @@ export function ExamDetailPage() {
   const [similarCases, setSimilarCases] = useState<CaseArchiveResult[]>([])
   const [isSimilarCasesLoading, setIsSimilarCasesLoading] = useState(false)
   const [similarCasesError, setSimilarCasesError] = useState('')
+  const [similarCasesInfo, setSimilarCasesInfo] = useState('')
   const [isSimilarCasesOpen, setIsSimilarCasesOpen] = useState(true)
 
   const [isEditingExam, setIsEditingExam] = useState(false)
@@ -294,8 +339,27 @@ export function ExamDetailPage() {
   }
 
   const loadSimilarCases = async (sourceExam: Exam, queryValue: string) => {
+    const trimmedQuery = queryValue.trim()
+
+    if (!trimmedQuery) {
+      similarCasesAbortRef.current?.abort()
+      setSimilarCases([])
+      setIsSimilarCasesLoading(false)
+      setSimilarCasesError('')
+      setSimilarCasesInfo(SIMILAR_CASES_CONTEXT_HINT)
+      return
+    }
+
+    const requestId = similarCasesRequestIdRef.current + 1
+    similarCasesRequestIdRef.current = requestId
+
+    similarCasesAbortRef.current?.abort()
+    const controller = new AbortController()
+    similarCasesAbortRef.current = controller
+
     setIsSimilarCasesLoading(true)
     setSimilarCasesError('')
+    setSimilarCasesInfo('')
 
     const contextualExamType =
       sourceExam.exam_type === 'histology' || sourceExam.exam_type === 'cytology'
@@ -304,22 +368,32 @@ export function ExamDetailPage() {
 
     try {
       const data = await caseArchiveService.search({
-        q: queryValue.trim() || undefined,
+        q: trimmedQuery,
         section: archiveSection,
         exam_type: contextualExamType,
         source_exam_id: sourceExam.id,
         limit: 6,
-      })
+      }, { signal: controller.signal })
+
+      if (controller.signal.aborted || requestId !== similarCasesRequestIdRef.current) {
+        return
+      }
 
       setSimilarCases(data)
     } catch (loadError) {
+      if (controller.signal.aborted || requestId !== similarCasesRequestIdRef.current) {
+        return
+      }
+
       setSimilarCasesError(
         loadError instanceof Error
           ? loadError.message
           : 'Impossible de charger les cas similaires.'
       )
     } finally {
-      setIsSimilarCasesLoading(false)
+      if (!controller.signal.aborted && requestId === similarCasesRequestIdRef.current) {
+        setIsSimilarCasesLoading(false)
+      }
     }
   }
 
@@ -362,9 +436,11 @@ export function ExamDetailPage() {
 
   useEffect(() => {
     if (!exam) {
+      similarCasesAbortRef.current?.abort()
       setArchiveQuery('')
       setSimilarCases([])
       setSimilarCasesError('')
+      setSimilarCasesInfo('')
       setIsSimilarCasesLoading(false)
       return
     }
@@ -373,6 +449,12 @@ export function ExamDetailPage() {
     setArchiveQuery(initialQuery)
     void loadSimilarCases(exam, initialQuery)
   }, [exam?.id, exam?.sample_nature, exam?.exam_history, exam?.diagnosis_keywords, exam?.exam_type])
+
+  useEffect(() => {
+    return () => {
+      similarCasesAbortRef.current?.abort()
+    }
+  }, [])
 
   // Edit exam ----------------------------------------------------------------
   const onEditExam = () => {
@@ -982,7 +1064,7 @@ export function ExamDetailPage() {
             <div>
               <h2>Cas similaires</h2>
               <p>
-                Recherche contextuelle parmi les cas validés proches du dossier courant.
+                Recherche de référence parmi les cas validés du laboratoire à partir du contexte déjà enregistré dans ce dossier.
               </p>
             </div>
 
@@ -1038,13 +1120,14 @@ export function ExamDetailPage() {
               </form>
 
               <p className="case-archive-side-note">
-                Les résultats sont filtrés sur le type de prélèvement courant et ce dossier est exclu de la recherche.
+                Les résultats restent limités au type de prélèvement courant et ce dossier est toujours exclu de la recherche.
               </p>
 
               <CaseArchiveResultList
                 results={similarCases}
                 loading={isSimilarCasesLoading}
                 error={similarCasesError}
+                info={similarCasesInfo}
                 emptyTitle="Aucun cas similaire trouvé."
                 emptyDescription="Ajustez les termes de recherche ou actualisez le contexte du dossier."
                 compact
