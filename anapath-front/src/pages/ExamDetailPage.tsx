@@ -4,12 +4,14 @@ import { Link, useParams } from 'react-router-dom'
 import { FormField } from '../components/FormField'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
+import { CaseArchiveResultList } from '../components/archive/CaseArchiveResultList'
 import { PageContainer } from '../layouts/PageContainer'
+import { caseArchiveService } from '../services/caseArchiveService'
 import { examService } from '../services/examService'
 import type { UpdateExamInput } from '../services/examService'
 import { patientService } from '../services/patientService'
 import { reportTemplateService } from '../services/reportTemplateService'
-import type { Exam, ExamWithReportSummary, ReportInput, ReportTemplate } from '../types/domain'
+import type { CaseArchiveResult, CaseArchiveSection, Exam, ExamWithReportSummary, ReportInput, ReportTemplate } from '../types/domain'
 import { mapExamStatusToBackend } from '../utils/domainMappings'
 import { formatDate, truncate } from '../utils/formatting'
 
@@ -24,9 +26,47 @@ function toDiagnosisKeywordsString(value: Exam['diagnosis_keywords']): string {
   return value ?? ''
 }
 
+function toDiagnosisKeywordsArray(value: Exam['diagnosis_keywords']): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((keyword) => keyword.trim())
+      .filter(Boolean)
+  }
+
+  return String(value ?? '')
+    .split(',')
+    .map((keyword) => keyword.trim())
+    .filter(Boolean)
+}
+
 function formatDiagnosisKeywords(value: Exam['diagnosis_keywords']): string {
   if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '—'
   return value || '—'
+}
+
+function toArchiveSearchToken(value: string): string {
+  const sanitized = value.replace(/"/g, ' ').trim()
+  if (!sanitized) return ''
+  return sanitized.includes(' ') ? `"${sanitized}"` : sanitized
+}
+
+function buildArchiveContextQuery(exam: Exam): string {
+  const diagnosisKeywords = toDiagnosisKeywordsArray(exam.diagnosis_keywords)
+    .slice(0, 3)
+    .map(toArchiveSearchToken)
+    .filter(Boolean)
+
+  const historyTerms = exam.exam_history
+    .split(/[^A-Za-zÀ-ÿ0-9]+/)
+    .map((term) => term.trim())
+    .filter((term, index, terms) => term.length >= 4 && terms.indexOf(term) === index)
+    .slice(0, 2)
+    .map(toArchiveSearchToken)
+    .filter(Boolean)
+
+  const sampleNature = toArchiveSearchToken(exam.sample_nature ?? '')
+
+  return [...new Set([sampleNature, ...diagnosisKeywords, ...historyTerms].filter(Boolean))].join(' OR ')
 }
 
 function toExamEditForm(exam: Exam): UpdateExamInput {
@@ -73,6 +113,14 @@ const STATUS_NEXT: Record<string, { label: string; next: 'in_progress' | 'comple
   in_progress: { label: 'Valider', next: 'completed' },
 }
 
+const ARCHIVE_SECTION_OPTIONS: { value: CaseArchiveSection; label: string }[] = [
+  { value: 'all', label: 'Toutes sections' },
+  { value: 'conclusion', label: 'Conclusion' },
+  { value: 'microscopy', label: 'Microscopie' },
+  { value: 'macroscopy', label: 'Macroscopie' },
+  { value: 'clinical_info', label: 'RC' },
+]
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 export function ExamDetailPage() {
@@ -90,6 +138,12 @@ export function ExamDetailPage() {
 
   const [patientName, setPatientName] = useState('')
   const [antecedents, setAntecedents] = useState<ExamWithReportSummary[]>([])
+  const [archiveQuery, setArchiveQuery] = useState('')
+  const [archiveSection, setArchiveSection] = useState<CaseArchiveSection>('all')
+  const [similarCases, setSimilarCases] = useState<CaseArchiveResult[]>([])
+  const [isSimilarCasesLoading, setIsSimilarCasesLoading] = useState(false)
+  const [similarCasesError, setSimilarCasesError] = useState('')
+  const [isSimilarCasesOpen, setIsSimilarCasesOpen] = useState(true)
 
   const [isEditingExam, setIsEditingExam] = useState(false)
   const [isExamSubmitting, setIsExamSubmitting] = useState(false)
@@ -239,6 +293,49 @@ export function ExamDetailPage() {
     }
   }
 
+  const loadSimilarCases = async (sourceExam: Exam, queryValue: string) => {
+    setIsSimilarCasesLoading(true)
+    setSimilarCasesError('')
+
+    const contextualExamType =
+      sourceExam.exam_type === 'histology' || sourceExam.exam_type === 'cytology'
+        ? sourceExam.exam_type
+        : undefined
+
+    try {
+      const data = await caseArchiveService.search({
+        q: queryValue.trim() || undefined,
+        section: archiveSection,
+        exam_type: contextualExamType,
+        source_exam_id: sourceExam.id,
+        limit: 6,
+      })
+
+      setSimilarCases(data)
+    } catch (loadError) {
+      setSimilarCasesError(
+        loadError instanceof Error
+          ? loadError.message
+          : 'Impossible de charger les cas similaires.'
+      )
+    } finally {
+      setIsSimilarCasesLoading(false)
+    }
+  }
+
+  const handleRefreshSimilarCases = () => {
+    if (!exam) return
+    const nextQuery = buildArchiveContextQuery(exam)
+    setArchiveQuery(nextQuery)
+    void loadSimilarCases(exam, nextQuery)
+  }
+
+  const handleSubmitSimilarCases = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!exam) return
+    void loadSimilarCases(exam, archiveQuery)
+  }
+
   // Load patient name + antecedents ------------------------------------------
   useEffect(() => {
     if (!exam?.patient_id) return
@@ -262,6 +359,20 @@ export function ExamDetailPage() {
     }
     void loadPatientContext()
   }, [exam?.patient_id, id])
+
+  useEffect(() => {
+    if (!exam) {
+      setArchiveQuery('')
+      setSimilarCases([])
+      setSimilarCasesError('')
+      setIsSimilarCasesLoading(false)
+      return
+    }
+
+    const initialQuery = buildArchiveContextQuery(exam)
+    setArchiveQuery(initialQuery)
+    void loadSimilarCases(exam, initialQuery)
+  }, [exam?.id, exam?.sample_nature, exam?.exam_history, exam?.diagnosis_keywords, exam?.exam_type])
 
   // Edit exam ----------------------------------------------------------------
   const onEditExam = () => {
@@ -676,194 +787,273 @@ export function ExamDetailPage() {
         </section>
       )}
 
-      {/* ── Compte Rendu ─────────────────────────────────────────────────── */}
-      <section className="panel exam-detail-report-editor-panel">
-        <div className="panel-header">
-          <div>
-            <h2>Compte Rendu</h2>
-            {isReportLocked ? (
-              <div className="report-locked-banner-row">
-                <div className="report-locked-banner">
-                  Rapport validé — lecture seule
+      {/* ── Espace de travail du compte rendu ───────────────────────────── */}
+      <div className="exam-detail-workspace-grid">
+        <section className="panel exam-detail-report-editor-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Compte Rendu</h2>
+              {isReportLocked ? (
+                <div className="report-locked-banner-row">
+                  <div className="report-locked-banner">
+                    Rapport validé — lecture seule
+                  </div>
+                  <button
+                    type="button"
+                    className="button tertiary"
+                    onClick={() => setIsReopenConfirmOpen(true)}
+                    disabled={isStatusUpdating}
+                  >
+                    Rouvrir le rapport
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="button tertiary"
-                  onClick={() => setIsReopenConfirmOpen(true)}
-                  disabled={isStatusUpdating}
-                >
-                  Rouvrir le rapport
-                </button>
+              ) : (
+                <p>Rédigez le compte rendu structuré pour ce prélèvement.</p>
+              )}
+            </div>
+          </div>
+
+          <form className="form-layout report-form-layout" onSubmit={onSubmitReport}>
+            {isReopenConfirmOpen && (
+              <div className="template-confirm-banner">
+                <span>Rouvrir ce rapport le rendra à nouveau modifiable et effacera la date d'émission du résultat.</span>
+                <div className="template-confirm-actions">
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => void onConfirmReopen()}
+                    disabled={isStatusUpdating}
+                  >
+                    Confirmer
+                  </button>
+                  <button
+                    type="button"
+                    className="button tertiary"
+                    onClick={() => setIsReopenConfirmOpen(false)}
+                    disabled={isStatusUpdating}
+                  >
+                    Annuler
+                  </button>
+                </div>
               </div>
-            ) : (
-              <p>Rédigez le compte rendu structuré pour ce prélèvement.</p>
             )}
-          </div>
-        </div>
 
-        <form className="form-layout report-form-layout" onSubmit={onSubmitReport}>
-          {isReopenConfirmOpen && (
-            <div className="template-confirm-banner">
-              <span>Rouvrir ce rapport le rendra à nouveau modifiable et effacera la date d'émission du résultat.</span>
-              <div className="template-confirm-actions">
+            {templates.length > 0 && !isReportLocked && (
+              <div className="template-picker-row">
+                <select
+                  value=""
+                  onChange={(e) => handleApplyTemplate(e.target.value)}
+                  disabled={isReportLoading || isSubmitting}
+                >
+                  <option value="" disabled>Appliquer un modèle…</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={String(t.id)}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {showConfirmApply && pendingTemplate && (
+              <div className="template-confirm-banner">
+                <span>Ce modèle remplacera le contenu existant.</span>
+                <div className="template-confirm-actions">
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => applyTemplate(pendingTemplate)}
+                  >
+                    Confirmer
+                  </button>
+                  <button
+                    type="button"
+                    className="button tertiary"
+                    onClick={() => { setShowConfirmApply(false); setPendingTemplate(null) }}
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="form-grid">
+              <FormField label="RC" htmlFor="clinical_info">
+                <textarea
+                  id="clinical_info"
+                  rows={4}
+                  value={report.clinical_info}
+                  disabled={isReportLoading || isSubmitting || isReportLocked}
+                  onChange={(e) => setReport({ ...report, clinical_info: e.target.value })}
+                />
+              </FormField>
+
+              <FormField label="Macroscopie" htmlFor="macroscopy">
+                <textarea
+                  id="macroscopy"
+                  rows={4}
+                  value={report.macroscopy}
+                  disabled={isReportLoading || isSubmitting || isReportLocked}
+                  onChange={(e) => setReport({ ...report, macroscopy: e.target.value })}
+                />
+              </FormField>
+
+              <FormField label="Microscopie" htmlFor="microscopy">
+                <textarea
+                  id="microscopy"
+                  rows={5}
+                  value={report.microscopy}
+                  disabled={isReportLoading || isSubmitting || isReportLocked}
+                  onChange={(e) => setReport({ ...report, microscopy: e.target.value })}
+                />
+              </FormField>
+
+              <FormField label="Conclusion" htmlFor="conclusion">
+                <textarea
+                  id="conclusion"
+                  rows={4}
+                  value={report.conclusion}
+                  disabled={isReportLoading || isSubmitting || isReportLocked}
+                  onChange={(e) => setReport({ ...report, conclusion: e.target.value })}
+                />
+              </FormField>
+            </div>
+
+            <div className="exam-detail-feedback" aria-live="polite">
+              {isReportLoading ? <p className="report-loading">Chargement du compte rendu…</p> : null}
+              {reportError ? <p className="error-message">{reportError}</p> : null}
+              {reportInfo ? <p className="success-message">{reportInfo}</p> : null}
+              {saveAsTemplateInfo ? <p className="success-message">{saveAsTemplateInfo}</p> : null}
+            </div>
+
+            {saveAsTemplateOpen && !isReportLocked && (
+              <div className="save-as-template-row">
+                <input
+                  type="text"
+                  placeholder="Nom du modèle"
+                  value={saveAsTemplateName}
+                  onChange={(e) => setSaveAsTemplateName(e.target.value)}
+                  disabled={isSavingTemplate}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleSaveAsTemplate() } }}
+                  autoFocus
+                />
                 <button
                   type="button"
                   className="button"
-                  onClick={() => void onConfirmReopen()}
-                  disabled={isStatusUpdating}
+                  onClick={() => void handleSaveAsTemplate()}
+                  disabled={isSavingTemplate}
                 >
-                  Confirmer
+                  {isSavingTemplate ? 'Enregistrement…' : 'Enregistrer'}
                 </button>
                 <button
                   type="button"
                   className="button tertiary"
-                  onClick={() => setIsReopenConfirmOpen(false)}
-                  disabled={isStatusUpdating}
+                  onClick={() => { setSaveAsTemplateOpen(false); setSaveAsTemplateName(''); setSaveAsTemplateError('') }}
+                  disabled={isSavingTemplate}
                 >
                   Annuler
                 </button>
+                {saveAsTemplateError ? <p className="error-message">{saveAsTemplateError}</p> : null}
               </div>
-            </div>
-          )}
+            )}
 
-          {templates.length > 0 && !isReportLocked && (
-            <div className="template-picker-row">
-              <select
-                value=""
-                onChange={(e) => handleApplyTemplate(e.target.value)}
-                disabled={isReportLoading || isSubmitting}
-              >
-                <option value="" disabled>Appliquer un modèle…</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={String(t.id)}>{t.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {showConfirmApply && pendingTemplate && (
-            <div className="template-confirm-banner">
-              <span>Ce modèle remplacera le contenu existant.</span>
-              <div className="template-confirm-actions">
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => applyTemplate(pendingTemplate)}
-                >
-                  Confirmer
-                </button>
+            {!isReportLocked && (
+              <div className="form-actions form-actions-sticky">
                 <button
                   type="button"
                   className="button tertiary"
-                  onClick={() => { setShowConfirmApply(false); setPendingTemplate(null) }}
+                  disabled={isReportLoading || isSubmitting}
+                  onClick={() => { setSaveAsTemplateOpen((v) => !v); setSaveAsTemplateError(''); setSaveAsTemplateInfo('') }}
                 >
-                  Annuler
+                  Sauvegarder comme modèle
+                </button>
+                <button
+                  type="submit"
+                  className="button"
+                  disabled={isReportLoading || isSubmitting}
+                >
+                  {isSubmitting ? 'Enregistrement…' : 'Enregistrer le compte rendu'}
                 </button>
               </div>
+            )}
+          </form>
+        </section>
+
+        <aside className="panel case-archive-side-panel">
+          <div className="panel-header case-archive-side-panel-header">
+            <div>
+              <h2>Cas similaires</h2>
+              <p>
+                Recherche contextuelle parmi les cas validés proches du dossier courant.
+              </p>
             </div>
-          )}
 
-          <div className="form-grid">
-            <FormField label="RC" htmlFor="clinical_info">
-              <textarea
-                id="clinical_info"
-                rows={4}
-                value={report.clinical_info}
-                disabled={isReportLoading || isSubmitting || isReportLocked}
-                onChange={(e) => setReport({ ...report, clinical_info: e.target.value })}
-              />
-            </FormField>
-
-            <FormField label="Macroscopie" htmlFor="macroscopy">
-              <textarea
-                id="macroscopy"
-                rows={4}
-                value={report.macroscopy}
-                disabled={isReportLoading || isSubmitting || isReportLocked}
-                onChange={(e) => setReport({ ...report, macroscopy: e.target.value })}
-              />
-            </FormField>
-
-            <FormField label="Microscopie" htmlFor="microscopy">
-              <textarea
-                id="microscopy"
-                rows={5}
-                value={report.microscopy}
-                disabled={isReportLoading || isSubmitting || isReportLocked}
-                onChange={(e) => setReport({ ...report, microscopy: e.target.value })}
-              />
-            </FormField>
-
-            <FormField label="Conclusion" htmlFor="conclusion">
-              <textarea
-                id="conclusion"
-                rows={4}
-                value={report.conclusion}
-                disabled={isReportLoading || isSubmitting || isReportLocked}
-                onChange={(e) => setReport({ ...report, conclusion: e.target.value })}
-              />
-            </FormField>
+            <button
+              type="button"
+              className="button tertiary"
+              onClick={() => setIsSimilarCasesOpen((currentValue) => !currentValue)}
+            >
+              {isSimilarCasesOpen ? 'Réduire' : 'Afficher'}
+            </button>
           </div>
 
-          <div className="exam-detail-feedback" aria-live="polite">
-            {isReportLoading ? <p className="report-loading">Chargement du compte rendu…</p> : null}
-            {reportError ? <p className="error-message">{reportError}</p> : null}
-            {reportInfo ? <p className="success-message">{reportInfo}</p> : null}
-            {saveAsTemplateInfo ? <p className="success-message">{saveAsTemplateInfo}</p> : null}
-          </div>
+          {isSimilarCasesOpen && (
+            <>
+              <form className="case-archive-side-form" onSubmit={handleSubmitSimilarCases}>
+                <label className="case-archive-side-search">
+                  <span>Recherche contextuelle</span>
+                  <input
+                    type="text"
+                    value={archiveQuery}
+                    placeholder="Nature, mots-clés, contexte clinique…"
+                    onChange={(event) => setArchiveQuery(event.target.value)}
+                  />
+                </label>
 
-          {saveAsTemplateOpen && !isReportLocked && (
-            <div className="save-as-template-row">
-              <input
-                type="text"
-                placeholder="Nom du modèle"
-                value={saveAsTemplateName}
-                onChange={(e) => setSaveAsTemplateName(e.target.value)}
-                disabled={isSavingTemplate}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleSaveAsTemplate() } }}
-                autoFocus
+                <label className="case-archive-side-search">
+                  <span>Section</span>
+                  <select
+                    value={archiveSection}
+                    onChange={(event) => setArchiveSection(event.target.value as CaseArchiveSection)}
+                  >
+                    {ARCHIVE_SECTION_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="case-archive-side-actions">
+                  <button
+                    type="button"
+                    className="button tertiary"
+                    onClick={handleRefreshSimilarCases}
+                    disabled={isSimilarCasesLoading}
+                  >
+                    Actualiser depuis le dossier
+                  </button>
+                  <button type="submit" className="button" disabled={isSimilarCasesLoading}>
+                    {isSimilarCasesLoading ? 'Recherche…' : 'Rechercher'}
+                  </button>
+                </div>
+              </form>
+
+              <p className="case-archive-side-note">
+                Les résultats sont filtrés sur le type de prélèvement courant et ce dossier est exclu de la recherche.
+              </p>
+
+              <CaseArchiveResultList
+                results={similarCases}
+                loading={isSimilarCasesLoading}
+                error={similarCasesError}
+                emptyTitle="Aucun cas similaire trouvé."
+                emptyDescription="Ajustez les termes de recherche ou actualisez le contexte du dossier."
+                compact
+                openLinksInNewTab
               />
-              <button
-                type="button"
-                className="button"
-                onClick={() => void handleSaveAsTemplate()}
-                disabled={isSavingTemplate}
-              >
-                {isSavingTemplate ? 'Enregistrement…' : 'Enregistrer'}
-              </button>
-              <button
-                type="button"
-                className="button tertiary"
-                onClick={() => { setSaveAsTemplateOpen(false); setSaveAsTemplateName(''); setSaveAsTemplateError('') }}
-                disabled={isSavingTemplate}
-              >
-                Annuler
-              </button>
-              {saveAsTemplateError ? <p className="error-message">{saveAsTemplateError}</p> : null}
-            </div>
+            </>
           )}
-
-          {!isReportLocked && (
-            <div className="form-actions form-actions-sticky">
-              <button
-                type="button"
-                className="button tertiary"
-                disabled={isReportLoading || isSubmitting}
-                onClick={() => { setSaveAsTemplateOpen((v) => !v); setSaveAsTemplateError(''); setSaveAsTemplateInfo('') }}
-              >
-                Sauvegarder comme modèle
-              </button>
-              <button
-                type="submit"
-                className="button"
-                disabled={isReportLoading || isSubmitting}
-              >
-                {isSubmitting ? 'Enregistrement…' : 'Enregistrer le compte rendu'}
-              </button>
-            </div>
-          )}
-        </form>
-      </section>
+        </aside>
+      </div>
     </PageContainer>
   )
 }

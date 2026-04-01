@@ -88,7 +88,37 @@ CREATE TABLE IF NOT EXISTS report_templates (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE OR REPLACE FUNCTION immutable_text_array_to_string(input_array text[], separator text)
+RETURNS text
+LANGUAGE SQL
+IMMUTABLE
+STRICT
+AS $$
+  SELECT array_to_string(input_array, separator);
+$$;
+
 CREATE INDEX IF NOT EXISTS idx_patients_laboratory_id ON patients(laboratory_id);
 CREATE INDEX IF NOT EXISTS idx_exams_laboratory_id ON exams(laboratory_id);
 CREATE INDEX IF NOT EXISTS idx_exams_patient_id ON exams(patient_id);
 CREATE INDEX IF NOT EXISTS idx_reports_exam_id ON reports(exam_id);
+CREATE INDEX IF NOT EXISTS idx_exams_archive_completed_date
+  ON exams(laboratory_id, status, result_issued_date DESC);
+CREATE INDEX IF NOT EXISTS idx_exams_archive_search
+  ON exams
+  USING GIN (
+    (
+      setweight(to_tsvector('simple', COALESCE(sample_nature, '')), 'B') ||
+      setweight(to_tsvector('simple', COALESCE(exam_history, '')), 'C') ||
+      setweight(to_tsvector('simple', COALESCE(immutable_text_array_to_string(diagnosis_keywords, ' '), '')), 'B')
+    )
+  );
+CREATE INDEX IF NOT EXISTS idx_reports_archive_search
+  ON reports
+  USING GIN (
+    (
+      setweight(to_tsvector('simple', COALESCE(clinical_info, '')), 'C') ||
+      setweight(to_tsvector('simple', COALESCE(macroscopy, '')), 'C') ||
+      setweight(to_tsvector('simple', COALESCE(microscopy, '')), 'A') ||
+      setweight(to_tsvector('simple', COALESCE(conclusion, '')), 'A')
+    )
+  );

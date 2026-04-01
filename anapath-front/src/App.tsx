@@ -4,6 +4,7 @@ import { ProtectedRoute } from './routes/ProtectedRoute.tsx'
 import { useAuth } from './hooks/useAuth.ts'
 import { LoginPage } from './pages/LoginPage.tsx'
 import { DashboardPage } from './pages/DashboardPage.tsx'
+import { ArchivePage } from './pages/ArchivePage.tsx'
 import { PatientsListPage } from './pages/PatientsListPage.tsx'
 import { NewPatientPage } from './pages/NewPatientPage.tsx'
 import { PatientDetailPage } from './pages/PatientDetailPage.tsx'
@@ -31,6 +32,7 @@ function App() {
 
         <Route element={<MainLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/archive" element={<ArchivePage />} />
           <Route path="/patients" element={<PatientsListPage />} />
           <Route path="/patients/new" element={<NewPatientPage />} />
           <Route path="/patients/:id" element={<PatientDetailPage />} />

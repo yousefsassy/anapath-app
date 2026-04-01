@@ -1,5 +1,18 @@
 import pool, { query } from '../config/database.js';
 
+const examArchiveSearchVectorSql = `
+  setweight(to_tsvector('simple', coalesce(e.sample_nature, '')), 'B') ||
+  setweight(to_tsvector('simple', coalesce(e.exam_history, '')), 'C') ||
+  setweight(to_tsvector('simple', coalesce(immutable_text_array_to_string(e.diagnosis_keywords, ' '), '')), 'B')
+`;
+
+const reportArchiveSearchVectorSql = `
+  setweight(to_tsvector('simple', coalesce(r.clinical_info, '')), 'C') ||
+  setweight(to_tsvector('simple', coalesce(r.macroscopy, '')), 'C') ||
+  setweight(to_tsvector('simple', coalesce(r.microscopy, '')), 'A') ||
+  setweight(to_tsvector('simple', coalesce(r.conclusion, '')), 'A')
+`;
+
 export async function findAllPatients() {
   const result = await query('SELECT * FROM patients ORDER BY id ASC');
   return result.rows;
@@ -416,4 +429,165 @@ export async function findUserByEmail(email) {
     [email]
   );
   return result.rows[0] || null;
+}
+
+export async function searchCaseArchive({
+  laboratory_id,
+  q = '',
+  section = 'all',
+  exam_type,
+  date_from,
+  date_to,
+  source_exam_id,
+  source_exam_type = null,
+  source_keywords = [],
+  limit = 20,
+}) {
+  const conditions = [
+    'e.laboratory_id = $1',
+    "e.status = 'completed'",
+  ];
+  const params = [laboratory_id];
+
+  if (exam_type) {
+    params.push(exam_type);
+    conditions.push(`e.exam_type = $${params.length}`);
+  }
+
+  if (date_from) {
+    params.push(date_from);
+    conditions.push(`e.result_issued_date >= $${params.length}`);
+  }
+
+  if (date_to) {
+    params.push(date_to);
+    conditions.push(`e.result_issued_date <= $${params.length}`);
+  }
+
+  if (source_exam_id) {
+    params.push(source_exam_id);
+    conditions.push(`e.id <> $${params.length}`);
+  }
+
+  params.push(q.trim());
+  const searchParam = params.length;
+
+  params.push(section);
+  const sectionParam = params.length;
+
+  params.push(source_exam_type);
+  const sourceExamTypeParam = params.length;
+
+  params.push(source_keywords);
+  const sourceKeywordsParam = params.length;
+
+  params.push(limit);
+  const limitParam = params.length;
+
+  const sharedKeywordExistsSql = `
+    EXISTS (
+      SELECT 1
+      FROM unnest(e.diagnosis_keywords) AS candidate_keyword
+      WHERE lower(candidate_keyword) = ANY($${sourceKeywordsParam}::text[])
+    )
+  `;
+
+  const result = await query(
+    `WITH search_input AS (
+       SELECT CASE
+         WHEN btrim($${searchParam}) <> '' THEN websearch_to_tsquery('simple', btrim($${searchParam}))
+         ELSE NULL
+       END AS search_query
+     )
+     SELECT
+       e.id AS exam_id,
+       e.exam_number,
+       e.exam_type,
+       e.sample_nature,
+       e.result_issued_date,
+       p.age AS patient_age,
+       p.sex AS patient_sex,
+       e.diagnosis_keywords,
+       e.status,
+       CASE
+         WHEN search_input.search_query IS NULL THEN NULL
+         WHEN $${sectionParam} <> 'all' THEN $${sectionParam}
+         WHEN to_tsvector('simple', coalesce(r.conclusion, '')) @@ search_input.search_query THEN 'conclusion'
+         WHEN to_tsvector('simple', coalesce(r.microscopy, '')) @@ search_input.search_query THEN 'microscopy'
+         WHEN to_tsvector('simple', coalesce(r.macroscopy, '')) @@ search_input.search_query THEN 'macroscopy'
+         WHEN to_tsvector('simple', coalesce(r.clinical_info, '')) @@ search_input.search_query THEN 'clinical_info'
+         WHEN to_tsvector('simple', coalesce(e.sample_nature, '')) @@ search_input.search_query THEN 'sample_nature'
+         WHEN to_tsvector('simple', coalesce(e.exam_history, '')) @@ search_input.search_query THEN 'exam_history'
+         WHEN to_tsvector('simple', coalesce(immutable_text_array_to_string(e.diagnosis_keywords, ' '), '')) @@ search_input.search_query THEN 'diagnosis_keywords'
+         ELSE NULL
+       END AS matched_section,
+       CASE
+         WHEN search_input.search_query IS NULL THEN NULL
+         WHEN $${sectionParam} = 'clinical_info' THEN ts_headline('simple', coalesce(r.clinical_info, ''), search_input.search_query, 'StartSel=, StopSel=, MaxWords=28, MinWords=10, ShortWord=2, MaxFragments=2, FragmentDelimiter= … ')
+         WHEN $${sectionParam} = 'macroscopy' THEN ts_headline('simple', coalesce(r.macroscopy, ''), search_input.search_query, 'StartSel=, StopSel=, MaxWords=28, MinWords=10, ShortWord=2, MaxFragments=2, FragmentDelimiter= … ')
+         WHEN $${sectionParam} = 'microscopy' THEN ts_headline('simple', coalesce(r.microscopy, ''), search_input.search_query, 'StartSel=, StopSel=, MaxWords=28, MinWords=10, ShortWord=2, MaxFragments=2, FragmentDelimiter= … ')
+         WHEN $${sectionParam} = 'conclusion' THEN ts_headline('simple', coalesce(r.conclusion, ''), search_input.search_query, 'StartSel=, StopSel=, MaxWords=28, MinWords=10, ShortWord=2, MaxFragments=2, FragmentDelimiter= … ')
+         WHEN to_tsvector('simple', coalesce(r.conclusion, '')) @@ search_input.search_query THEN ts_headline('simple', coalesce(r.conclusion, ''), search_input.search_query, 'StartSel=, StopSel=, MaxWords=28, MinWords=10, ShortWord=2, MaxFragments=2, FragmentDelimiter= … ')
+         WHEN to_tsvector('simple', coalesce(r.microscopy, '')) @@ search_input.search_query THEN ts_headline('simple', coalesce(r.microscopy, ''), search_input.search_query, 'StartSel=, StopSel=, MaxWords=28, MinWords=10, ShortWord=2, MaxFragments=2, FragmentDelimiter= … ')
+         WHEN to_tsvector('simple', coalesce(r.macroscopy, '')) @@ search_input.search_query THEN ts_headline('simple', coalesce(r.macroscopy, ''), search_input.search_query, 'StartSel=, StopSel=, MaxWords=28, MinWords=10, ShortWord=2, MaxFragments=2, FragmentDelimiter= … ')
+         WHEN to_tsvector('simple', coalesce(r.clinical_info, '')) @@ search_input.search_query THEN ts_headline('simple', coalesce(r.clinical_info, ''), search_input.search_query, 'StartSel=, StopSel=, MaxWords=28, MinWords=10, ShortWord=2, MaxFragments=2, FragmentDelimiter= … ')
+         WHEN to_tsvector('simple', coalesce(e.sample_nature, '')) @@ search_input.search_query THEN ts_headline('simple', coalesce(e.sample_nature, ''), search_input.search_query, 'StartSel=, StopSel=, MaxWords=18, MinWords=6, ShortWord=2')
+         WHEN to_tsvector('simple', coalesce(e.exam_history, '')) @@ search_input.search_query THEN ts_headline('simple', coalesce(e.exam_history, ''), search_input.search_query, 'StartSel=, StopSel=, MaxWords=28, MinWords=10, ShortWord=2, MaxFragments=2, FragmentDelimiter= … ')
+         WHEN to_tsvector('simple', coalesce(immutable_text_array_to_string(e.diagnosis_keywords, ' '), '')) @@ search_input.search_query THEN ts_headline('simple', coalesce(immutable_text_array_to_string(e.diagnosis_keywords, ', '), ''), search_input.search_query, 'StartSel=, StopSel=, MaxWords=18, MinWords=4, ShortWord=2')
+         ELSE NULL
+       END AS matched_excerpt,
+       NULLIF(left(regexp_replace(coalesce(r.conclusion, ''), E'\\s+', ' ', 'g'), 220), '') AS conclusion_preview,
+       array_remove(
+         ARRAY[
+           CASE
+             WHEN $${sourceExamTypeParam}::text IS NOT NULL AND e.exam_type = $${sourceExamTypeParam}::text THEN 'same_exam_type'
+             ELSE NULL
+           END,
+           CASE
+             WHEN ${sharedKeywordExistsSql} THEN 'shared_keyword'
+             ELSE NULL
+           END
+         ],
+         NULL
+       ) AS match_reasons,
+       (
+         CASE
+           WHEN search_input.search_query IS NULL THEN 0
+           WHEN $${sectionParam} = 'clinical_info' THEN ts_rank_cd(to_tsvector('simple', coalesce(r.clinical_info, '')), search_input.search_query, 32)
+           WHEN $${sectionParam} = 'macroscopy' THEN ts_rank_cd(to_tsvector('simple', coalesce(r.macroscopy, '')), search_input.search_query, 32)
+           WHEN $${sectionParam} = 'microscopy' THEN ts_rank_cd(setweight(to_tsvector('simple', coalesce(r.microscopy, '')), 'A'), search_input.search_query, 32)
+           WHEN $${sectionParam} = 'conclusion' THEN ts_rank_cd(setweight(to_tsvector('simple', coalesce(r.conclusion, '')), 'A'), search_input.search_query, 32)
+           ELSE ts_rank_cd((${examArchiveSearchVectorSql}) || (${reportArchiveSearchVectorSql}), search_input.search_query, 32)
+         END
+         + CASE
+             WHEN $${sourceExamTypeParam}::text IS NOT NULL AND e.exam_type = $${sourceExamTypeParam}::text THEN 0.18
+             ELSE 0
+           END
+         + CASE
+             WHEN ${sharedKeywordExistsSql} THEN 0.14
+             ELSE 0
+           END
+       ) AS relevance_score
+     FROM exams e
+     INNER JOIN reports r ON r.exam_id = e.id
+     INNER JOIN patients p ON p.id = e.patient_id
+     CROSS JOIN search_input
+     WHERE ${conditions.join(' AND ')}
+       AND (
+         search_input.search_query IS NULL
+         OR CASE
+             WHEN $${sectionParam} = 'clinical_info' THEN to_tsvector('simple', coalesce(r.clinical_info, '')) @@ search_input.search_query
+             WHEN $${sectionParam} = 'macroscopy' THEN to_tsvector('simple', coalesce(r.macroscopy, '')) @@ search_input.search_query
+             WHEN $${sectionParam} = 'microscopy' THEN to_tsvector('simple', coalesce(r.microscopy, '')) @@ search_input.search_query
+             WHEN $${sectionParam} = 'conclusion' THEN to_tsvector('simple', coalesce(r.conclusion, '')) @@ search_input.search_query
+             ELSE (${examArchiveSearchVectorSql}) @@ search_input.search_query
+               OR (${reportArchiveSearchVectorSql}) @@ search_input.search_query
+           END
+       )
+     ORDER BY relevance_score DESC, e.result_issued_date DESC NULLS LAST, e.created_at DESC
+     LIMIT $${limitParam}`,
+    params
+  );
+
+  return result.rows;
 }

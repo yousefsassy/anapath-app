@@ -1372,6 +1372,360 @@ td {
   padding-left: 2px;
 }
 
+/* Archives des cas */
+.archive-panel {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.archive-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.archive-panel-header h2 {
+  margin-bottom: 6px;
+}
+
+.archive-panel-header p {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.archive-panel-note {
+  max-width: 320px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f7fafc;
+  border: 1px solid #d9e6ed;
+  color: #5c7784;
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.archive-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 0 0 var(--space-md);
+  border-bottom: 1px solid var(--border);
+}
+
+.archive-search-wrapper {
+  min-width: 320px;
+}
+
+.archive-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.archive-clear-btn {
+  padding-inline: 10px;
+}
+
+.archive-results-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: #587180;
+}
+
+.archive-results-summary strong {
+  color: #223944;
+  font-size: 1.05rem;
+}
+
+.case-archive-results {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.case-archive-results--compact {
+  gap: var(--space-sm);
+}
+
+.case-archive-state {
+  padding: var(--space-xl) 0;
+  text-align: center;
+}
+
+.case-archive-state--danger .state-block-title {
+  color: var(--danger-text);
+}
+
+.case-archive-card {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-radius: 16px;
+  border: 1px solid #d5e4eb;
+  background: linear-gradient(180deg, #fbfdff 0%, #ffffff 100%);
+}
+
+.case-archive-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  align-items: flex-start;
+}
+
+.case-archive-card-ref-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.case-archive-card-ref {
+  color: var(--primary);
+  font-family: monospace;
+  font-size: 1rem;
+}
+
+.case-archive-card-meta {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.case-archive-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.case-archive-card-sample {
+  margin: 0;
+  color: #223944;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.case-archive-chip-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.case-archive-chip-row--secondary {
+  align-items: center;
+}
+
+.case-archive-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #d4dfe6;
+  background: #fff;
+  color: #48626f;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.case-archive-chip--accent {
+  background: #eef6fb;
+  border-color: #c9dfea;
+  color: #29556d;
+}
+
+.case-archive-chip--subtle {
+  background: #f7fafc;
+}
+
+.case-archive-chip--muted {
+  background: #f3f7f9;
+}
+
+.case-archive-snippet,
+.case-archive-conclusion-preview {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #e0ebf0;
+  background: #fff;
+}
+
+.case-archive-snippet p:last-child,
+.case-archive-conclusion-preview p:last-child {
+  margin: 0;
+  color: #304c59;
+  line-height: 1.6;
+}
+
+.case-archive-snippet-label {
+  margin: 0 0 6px;
+  color: #547180;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.case-archive-preview {
+  padding-top: var(--space-md);
+  border-top: 1px solid #dfe9ee;
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.case-archive-preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.case-archive-preview-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.case-archive-preview-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.case-archive-preview-meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.case-archive-preview-meta div {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #e0ebf0;
+  background: #fff;
+  display: grid;
+  gap: 4px;
+}
+
+.case-archive-preview-meta dt {
+  margin: 0;
+  color: #547180;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.case-archive-preview-meta dd {
+  margin: 0;
+  color: #304c59;
+  line-height: 1.5;
+}
+
+.case-archive-preview-report {
+  display: grid;
+  gap: 10px;
+}
+
+.case-archive-preview-section {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #e0ebf0;
+  background: #fff;
+}
+
+.case-archive-preview-section h4 {
+  margin: 0 0 6px;
+  font-size: 0.88rem;
+  color: #2f4f5e;
+}
+
+.case-archive-preview-section p,
+.case-archive-preview-empty {
+  margin: 0;
+  color: #365360;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.case-archive-results--compact .case-archive-card {
+  padding: 14px;
+}
+
+.exam-detail-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.95fr);
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.case-archive-side-panel {
+  border-color: #d1e1e8;
+  background: linear-gradient(180deg, #fafcfe 0%, #ffffff 100%);
+}
+
+.case-archive-side-panel-header {
+  align-items: flex-start;
+}
+
+.case-archive-side-form {
+  display: grid;
+  gap: 12px;
+  margin-bottom: var(--space-sm);
+}
+
+.case-archive-side-search {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.case-archive-side-search input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+
+.case-archive-side-search select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+
+.case-archive-side-search select:focus,
+.case-archive-side-search input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.case-archive-side-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.case-archive-side-note {
+  margin: 0 0 var(--space-md);
+  color: #5a7481;
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
 /* Patient detail: prélèvements table */
 .patient-detail-exams-table {
   width: 100%;
@@ -1980,6 +2334,35 @@ td {
 
   .form-grid,
   .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-panel-header,
+  .archive-toolbar,
+  .case-archive-card-head,
+  .case-archive-preview-head {
+    flex-direction: column;
+  }
+
+  .archive-search-wrapper {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .archive-toolbar-group,
+  .case-archive-card-actions,
+  .case-archive-side-actions {
+    width: 100%;
+  }
+
+  .archive-toolbar-group .accueil-date-label,
+  .case-archive-side-actions .button,
+  .case-archive-card-actions .button {
+    flex: 1 1 180px;
+  }
+
+  .exam-detail-workspace-grid,
+  .case-archive-preview-meta {
     grid-template-columns: 1fr;
   }
 

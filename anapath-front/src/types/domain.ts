@@ -95,6 +95,52 @@ export interface ExamWithReportSummary extends Exam {
   report_summary: ReportSummary | null
 }
 
+export type CaseArchiveMatchedSection =
+  | 'clinical_info'
+  | 'macroscopy'
+  | 'microscopy'
+  | 'conclusion'
+  | 'sample_nature'
+  | 'exam_history'
+  | 'diagnosis_keywords'
+
+export type CaseArchiveMatchReason =
+  | 'same_exam_type'
+  | 'shared_keyword'
+
+export type CaseArchiveSection =
+  | 'all'
+  | 'clinical_info'
+  | 'macroscopy'
+  | 'microscopy'
+  | 'conclusion'
+
+export interface CaseArchiveQuery {
+  q?: string
+  section?: CaseArchiveSection
+  exam_type?: 'histology' | 'cytology'
+  date_from?: string
+  date_to?: string
+  source_exam_id?: number | string
+  limit?: number
+}
+
+export interface CaseArchiveResult {
+  exam_id: number
+  exam_number: string
+  exam_type: ExamType
+  sample_nature: string
+  result_issued_date: string | null
+  patient_age: number
+  patient_sex: SexBackend
+  diagnosis_keywords: string[]
+  status: Extract<ExamStatus, 'completed' | 'in_progress' | 'registered'>
+  matched_section: CaseArchiveMatchedSection | null
+  matched_excerpt: string | null
+  conclusion_preview: string | null
+  match_reasons?: CaseArchiveMatchReason[]
+}
+
 export interface ReportTemplate {
   id: number
   laboratory_id: number
