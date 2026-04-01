@@ -1,4 +1,8 @@
-import pool, { query } from '../config/database.js';
+import { query, withDbTransaction } from '../config/database.js';
+import {
+  createReportSnapshotPayload,
+  sanitizeAuditMetadata,
+} from '../utils/auditTrail.js';
 
 const examArchiveSearchVectorSql = `
   setweight(to_tsvector('simple', coalesce(e.sample_nature, '')), 'B') ||
@@ -12,6 +16,14 @@ const reportArchiveSearchVectorSql = `
   setweight(to_tsvector('simple', coalesce(r.microscopy, '')), 'A') ||
   setweight(to_tsvector('simple', coalesce(r.conclusion, '')), 'A')
 `;
+
+async function executeDb(db, text, params = []) {
+  if (db?.query) {
+    return db.query(text, params);
+  }
+
+  return query(text, params);
+}
 
 export async function findAllPatients(laboratoryId) {
   const result = await query(
@@ -53,7 +65,7 @@ export async function insertPatient(payload) {
   return result.rows[0];
 }
 
-export async function updatePatientById(patientId, payload) {
+export async function updatePatientById(patientId, laboratoryId, payload) {
   const result = await query(
     `UPDATE patients
      SET
@@ -65,6 +77,7 @@ export async function updatePatientById(patientId, payload) {
        general_history = COALESCE($7, general_history),
        updated_at = NOW()
      WHERE id = $1
+       AND laboratory_id = $8
      RETURNING *`,
     [
       patientId,
@@ -74,6 +87,7 @@ export async function updatePatientById(patientId, payload) {
       payload.sex,
       payload.phone,
       payload.general_history,
+      laboratoryId,
     ]
   );
 
@@ -182,8 +196,9 @@ export async function findAllExams(filters = {}, laboratoryId) {
   return result.rows;
 }
 
-export async function findExamById(examId, laboratoryId) {
-  const result = await query(
+export async function findExamById(examId, laboratoryId, db = null) {
+  const result = await executeDb(
+    db,
     'SELECT * FROM exams WHERE id = $1 AND laboratory_id = $2',
     [examId, laboratoryId]
   );
@@ -231,8 +246,9 @@ export async function findCaseArchivePreviewByExamId(laboratoryId, examId) {
   };
 }
 
-export async function updateExamById(examId, laboratoryId, payload) {
-  const result = await query(
+export async function updateExamById(examId, laboratoryId, payload, db = null) {
+  const result = await executeDb(
+    db,
     `UPDATE exams
      SET
        exam_type = COALESCE($2, exam_type),
@@ -269,8 +285,9 @@ export async function updateExamById(examId, laboratoryId, payload) {
   return result.rows[0] || null;
 }
 
-export async function clearResultIssuedDateForExam(examId, laboratoryId) {
-  const result = await query(
+export async function clearResultIssuedDateForExam(examId, laboratoryId, db = null) {
+  const result = await executeDb(
+    db,
     `UPDATE exams
      SET result_issued_date = NULL, updated_at = NOW()
      WHERE id = $1 AND laboratory_id = $2
@@ -288,17 +305,13 @@ function formatExamNumber(examType, sequenceValue, year) {
 }
 
 export async function createExamWithReport(payload) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
+  return withDbTransaction(async (client) => {
     const patientResult = await client.query(
       'SELECT id FROM patients WHERE id = $1 AND laboratory_id = $2',
       [payload.patient_id, payload.laboratory_id]
     );
 
     if (!patientResult.rows[0]) {
-      await client.query('ROLLBACK');
       return { error: 'PATIENT_NOT_FOUND' };
     }
 
@@ -361,18 +374,15 @@ export async function createExamWithReport(payload) {
       [exam.id]
     );
 
-    await client.query('COMMIT');
     return { exam };
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
+  }, {
+    context: payload.dbPolicyContext || null,
+  });
 }
 
-export async function findReportByExamId(examId, laboratoryId) {
-  const result = await query(
+export async function findReportByExamId(examId, laboratoryId, db = null) {
+  const result = await executeDb(
+    db,
     `SELECT r.*
      FROM reports r
      INNER JOIN exams e ON e.id = r.exam_id
@@ -383,8 +393,9 @@ export async function findReportByExamId(examId, laboratoryId) {
   return result.rows[0] || null;
 }
 
-export async function createEmptyReportForExamId(examId, laboratoryId) {
-  const result = await query(
+export async function createEmptyReportForExamId(examId, laboratoryId, db = null) {
+  const result = await executeDb(
+    db,
     `INSERT INTO reports (exam_id, clinical_info, macroscopy, microscopy, conclusion)
      SELECT $1, '', '', '', ''
      WHERE EXISTS (
@@ -401,8 +412,9 @@ export async function createEmptyReportForExamId(examId, laboratoryId) {
   return result.rows[0] || null;
 }
 
-export async function updateReportByExamId(examId, payload, laboratoryId) {
-  const result = await query(
+export async function updateReportByExamId(examId, payload, laboratoryId, db = null) {
+  const result = await executeDb(
+    db,
     `UPDATE reports AS r
      SET
        clinical_info = COALESCE($2, clinical_info),
@@ -422,6 +434,57 @@ export async function updateReportByExamId(examId, payload, laboratoryId) {
       payload.microscopy,
       payload.conclusion,
       laboratoryId,
+    ]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function findLatestReportRevisionByExamId(examId, laboratoryId, db = null) {
+  const result = await executeDb(
+    db,
+    `SELECT *
+     FROM report_revisions
+     WHERE exam_id = $1
+       AND laboratory_id = $2
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`,
+    [examId, laboratoryId]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function createReportRevision(payload, db = null) {
+  const snapshot = createReportSnapshotPayload(payload);
+  const result = await executeDb(
+    db,
+    `INSERT INTO report_revisions (
+      laboratory_id,
+      exam_id,
+      report_id,
+      actor_user_id,
+      actor_session_id,
+      request_id,
+      snapshot_reason,
+      clinical_info,
+      macroscopy,
+      microscopy,
+      conclusion
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    RETURNING *`,
+    [
+      payload.laboratory_id,
+      payload.exam_id,
+      payload.report_id,
+      payload.actor_user_id ?? null,
+      payload.actor_session_id ?? null,
+      payload.request_id ?? null,
+      payload.snapshot_reason,
+      snapshot.clinical_info,
+      snapshot.macroscopy,
+      snapshot.microscopy,
+      snapshot.conclusion,
     ]
   );
 
@@ -506,9 +569,118 @@ export async function getExamStats(laboratoryId) {
 
 export async function findUserByEmail(email) {
   const result = await query(
-    'SELECT id, laboratory_id, full_name, email, password_hash, role FROM users WHERE email = $1',
+    `SELECT id, laboratory_id, full_name, email, password_hash, role
+     FROM users
+     WHERE LOWER(email) = LOWER($1)`,
     [email]
   );
+  return result.rows[0] || null;
+}
+
+export async function createUserSession(payload, db = null) {
+  const result = await executeDb(
+    db,
+    `INSERT INTO user_sessions (
+      user_id,
+      token_hash,
+      expires_at,
+      ip_address,
+      user_agent,
+      last_seen_at
+    ) VALUES ($1, $2, $3, $4, $5, NOW())
+    RETURNING *`,
+    [
+      payload.user_id,
+      payload.token_hash,
+      payload.expires_at,
+      payload.ip_address,
+      payload.user_agent,
+    ]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function findActiveUserSessionByTokenHash(tokenHash, db = null) {
+  const result = await executeDb(
+    db,
+    `SELECT
+       s.id AS session_id,
+       s.user_id,
+       s.expires_at,
+       s.last_seen_at,
+       u.laboratory_id,
+       u.full_name,
+       u.email,
+       u.role
+     FROM user_sessions s
+     INNER JOIN users u ON u.id = s.user_id
+     WHERE s.token_hash = $1
+       AND s.revoked_at IS NULL
+       AND s.expires_at > NOW()`,
+    [tokenHash]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function touchUserSession(sessionId, db = null) {
+  const result = await executeDb(
+    db,
+    `UPDATE user_sessions
+     SET last_seen_at = NOW()
+     WHERE id = $1
+     RETURNING id`,
+    [sessionId]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function revokeUserSessionByTokenHash(tokenHash, db = null) {
+  const result = await executeDb(
+    db,
+    `UPDATE user_sessions
+     SET revoked_at = NOW()
+     WHERE token_hash = $1
+       AND revoked_at IS NULL
+     RETURNING id`,
+    [tokenHash]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function appendAuditEvent(payload, db = null) {
+  const result = await executeDb(
+    db,
+    `INSERT INTO audit_events (
+      laboratory_id,
+      actor_user_id,
+      actor_session_id,
+      request_id,
+      event_type,
+      target_type,
+      target_id,
+      ip_address,
+      user_agent,
+      metadata
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+    RETURNING *`,
+    [
+      payload.laboratory_id ?? null,
+      payload.actor_user_id ?? null,
+      payload.actor_session_id ?? null,
+      payload.request_id ?? null,
+      payload.event_type,
+      payload.target_type,
+      payload.target_id ?? null,
+      payload.ip_address ?? null,
+      payload.user_agent ?? null,
+      JSON.stringify(sanitizeAuditMetadata(payload.metadata)),
+    ]
+  );
+
   return result.rows[0] || null;
 }
 

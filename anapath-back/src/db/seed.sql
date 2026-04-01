@@ -11,10 +11,8 @@ SET
   phone = EXCLUDED.phone,
   email = EXCLUDED.email;
 
--- Minimal admin user placeholder
-INSERT INTO users (laboratory_id, full_name, email, password_hash, role)
-VALUES (1, 'Default Admin', 'admin@anapath.local', 'admin123', 'admin')
-ON CONFLICT (email) DO NOTHING;
+-- Admin credentials are no longer seeded here.
+-- Use `npm run bootstrap:admin` with secure BOOTSTRAP_ADMIN_* env vars.
 
 -- One sample patient
 INSERT INTO patients (

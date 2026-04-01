@@ -16,7 +16,11 @@ import { SettingsPage } from './pages/SettingsPage.tsx'
 import { NotFoundPage } from './pages/NotFoundPage.tsx'
 
 function RootRedirect() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isChecking } = useAuth()
+
+  if (isChecking) {
+    return <p>Vérification de la session…</p>
+  }
 
   return <Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />
 }

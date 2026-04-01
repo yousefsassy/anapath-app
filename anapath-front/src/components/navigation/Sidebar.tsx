@@ -34,7 +34,7 @@ export function Sidebar() {
       </nav>
 
       <div className="sidebar-footer">
-        <p>Connecté : {user?.email ?? 'Médecin'}</p>
+        <p>Connecté : {user?.email ?? user?.full_name ?? 'Médecin'}</p>
         <button className="button secondary" onClick={onLogout}>
           Déconnexion
         </button>

@@ -5,12 +5,17 @@ import {
   updateTemplateHandler,
   deleteTemplateHandler,
 } from '../controllers/reportTemplateController.js';
+import {
+  validateCreateTemplateRequest,
+  validateTemplateDeleteRequest,
+  validateTemplateUpdateRequest,
+} from '../middlewares/validateRequest.js';
 
 const router = Router();
 
 router.get('/', getTemplates);
-router.post('/', createTemplateHandler);
-router.put('/:id', updateTemplateHandler);
-router.delete('/:id', deleteTemplateHandler);
+router.post('/', validateCreateTemplateRequest, createTemplateHandler);
+router.put('/:id', validateTemplateUpdateRequest, updateTemplateHandler);
+router.delete('/:id', validateTemplateDeleteRequest, deleteTemplateHandler);
 
 export default router;

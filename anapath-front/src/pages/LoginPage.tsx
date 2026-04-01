@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { FORM_LIMITS } from '../utils/formLimits'
 
 interface LocationState {
   from?: {
@@ -12,11 +13,15 @@ interface LocationState {
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { isAuthenticated, login } = useAuth()
+  const { isAuthenticated, isChecking, login } = useAuth()
 
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  if (isChecking) {
+    return <p>Vérification de la session…</p>
+  }
 
   if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />
@@ -63,6 +68,7 @@ export function LoginPage() {
               onChange={onChange}
               placeholder="medecin@anapath.local"
               autoComplete="email"
+              maxLength={FORM_LIMITS.email}
             />
           </div>
 
@@ -76,6 +82,7 @@ export function LoginPage() {
               onChange={onChange}
               placeholder="••••••••"
               autoComplete="current-password"
+              maxLength={FORM_LIMITS.password}
             />
           </div>
 

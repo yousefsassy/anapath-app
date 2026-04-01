@@ -1,6 +1,4 @@
-import { getStoredAuthUser } from './authStorage'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 interface ApiSuccessResponse<T> {
   success: true
@@ -18,6 +16,8 @@ type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse
 interface RequestOptions extends RequestInit {
   skipAuth?: boolean
 }
+
+let unauthorizedHandler: (() => void) | null = null
 
 export class ApiClientError extends Error {
   status: number
@@ -38,25 +38,16 @@ function getDefaultErrorMessage(status: number): string {
 }
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  if (!API_BASE_URL) {
-    throw new Error("L'URL de l'API n'est pas configurée.")
-  }
-
   const { skipAuth = false, headers, ...restOptions } = options
-  const authUser = getStoredAuthUser()
 
   const requestHeaders = new Headers({
     'Content-Type': 'application/json',
     ...(headers ?? {}),
   })
 
-  if (!skipAuth && authUser?.token) {
-    requestHeaders.set('Authorization', `Bearer ${authUser.token}`)
-    requestHeaders.set('X-Laboratory-Id', String(authUser.laboratory_id))
-  }
-
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...restOptions,
+    credentials: 'include',
     headers: requestHeaders,
   })
 
@@ -70,6 +61,9 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
   if (!response.ok || !payload?.success) {
     const status = response.ok ? 400 : response.status
+    if (status === 401 && !skipAuth) {
+      unauthorizedHandler?.()
+    }
     const message =
       payload && !payload.success
         ? payload.message || getDefaultErrorMessage(status)
@@ -78,6 +72,16 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   }
 
   return payload.data
+}
+
+export function registerUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler
+
+  return () => {
+    if (unauthorizedHandler === handler) {
+      unauthorizedHandler = null
+    }
+  }
 }
 
 export const apiClient = {

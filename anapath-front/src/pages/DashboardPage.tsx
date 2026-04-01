@@ -260,9 +260,8 @@ export function DashboardPage() {
                 exams.map((exam) => (
                   <tr
                     key={exam.id}
-                    className="accueil-row"
+                    className="accueil-row accueil-row--clickable"
                     onClick={() => navigate(`/exams/${exam.id}`)}
-                    style={{ cursor: 'pointer' }}
                   >
                     <td className="accueil-ref">
                       {exam.urgent && <span className="badge--urgent">Urgent</span>}{' '}

@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import net from 'node:net';
 import app from './src/app.js';
+import { logger } from './src/utils/logger.js';
 
 dotenv.config();
 
@@ -37,9 +38,11 @@ async function startServer() {
     }
 
     if (i === MAX_PORT_ATTEMPTS) {
-      console.error(
-        `No free port found between ${DEFAULT_PORT} and ${selectedPort}`
-      );
+      logger.error('server_start_failed', {
+        default_port: DEFAULT_PORT,
+        last_checked_port: selectedPort,
+        reason: 'no_available_port',
+      });
       process.exit(1);
     }
 
@@ -47,14 +50,17 @@ async function startServer() {
   }
 
   if (selectedPort !== DEFAULT_PORT) {
-    console.warn(
-      `Port ${DEFAULT_PORT} is busy. Backend is starting on ${selectedPort}.`
-    );
+    logger.warn('server_port_fallback', {
+      requested_port: DEFAULT_PORT,
+      selected_port: selectedPort,
+    });
   }
 
   app.listen(selectedPort, () => {
-    console.log(`Anapath backend running on port ${selectedPort}`);
-    console.log(`Open: http://localhost:${selectedPort}/api/health`);
+    logger.info('server_started', {
+      port: selectedPort,
+      health_url: `http://localhost:${selectedPort}/api/health`,
+    });
   });
 }
 

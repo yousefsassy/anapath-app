@@ -23,7 +23,7 @@ The product is organized around the daily pathologist workflow:
 ## What the app does today
 
 Anapath currently covers:
-- placeholder login and protected navigation
+- cookie-backed login/session and protected navigation
 - patient management
 - duplicate-aware patient creation
 - exam registration and tracking
@@ -35,12 +35,14 @@ Anapath currently covers:
 - lab/doctor print settings
 - case archive and advanced search over validated cases
 - contextual `Cas similaires` lookup inside the case workspace
-- a small automated regression layer and archive profiling artifacts for stabilization
+- backend audit events + minimal backend-only report revision snapshots
+- security regression coverage, dependency audit scripts, and CSP rollout preparation
+- archive profiling artifacts for stabilization
 
 ## Main doctor workflow
 
 ### 1. Login
-The app starts with a placeholder login flow. Once authenticated, the doctor is redirected to the work queue.
+The app starts with a server-side login flow. Once authenticated, the doctor receives a same-origin session cookie and is redirected to the work queue.
 
 ### 2. Work queue
 The dashboard (`/dashboard`) is the operational home screen. It shows:
@@ -91,11 +93,11 @@ This is the app's central working screen.
 
 ## Detailed features
 
-### Authentication placeholder flow
-- Login is functional but intentionally lightweight.
-- Credentials are checked against the backend.
-- The session stores a placeholder token and the current `laboratory_id`.
-- This is enough for the current single-doctor workflow, but it is not full production-grade auth.
+### Authentication and protected workflow
+- Login is handled by the backend and creates a real server-side session.
+- The frontend uses same-origin requests with `credentials: 'include'`.
+- Protected business routes derive the current user and `laboratory_id` from the backend session, not from frontend-provided lab headers.
+- This is production-oriented session handling for the current single-doctor workflow, even though broader user-management/RBAC scope is still intentionally limited.
 
 ### Dashboard / Accueil
 - The dashboard is the live work queue, not a patient registry and not the historical archive.
@@ -150,6 +152,16 @@ The doctor writes and saves the report explicitly. There is no autosave.
 - Reopening clears `result_issued_date` and unlocks the report for correction.
 
 This keeps the workflow simple and explicit: validate, lock, reopen if correction is needed.
+
+### Audit trail and backend report revisions
+- Critical security/workflow events are stored append-only in the backend audit ledger:
+  - login success/failure
+  - logout
+  - explicit report save
+  - validation
+  - reopening
+- The backend also stores minimal 4-section report snapshots on explicit save and validation when the content changed.
+- This traceability is currently backend-only. There is not yet a doctor-facing history or restore screen.
 
 ### Urgent cases
 - A prélèvement can be marked urgent at creation or edit time before validation.
@@ -215,8 +227,12 @@ The archive is designed as a clinical reference and retrieval tool, not an AI wr
 ### Recent stabilization work
 Recent stabilization work focused on safety rather than new product scope:
 - backend contract tests for critical API workflows
+- backend security tests for auth, RLS, audit, validation hardening, and tenant isolation
 - frontend smoke test for print draft/final rendering
+- frontend auth/session smoke tests
 - stale-request protection on the dashboard
+- PostgreSQL row-level security and request-scoped DB policy context
+- dependency audit scripts and frontend CSP compatibility checks
 - archive query profiling with realistic completed-case fixtures and `EXPLAIN ANALYZE`
 
 ## Architecture at a glance
@@ -225,13 +241,17 @@ Recent stabilization work focused on safety rather than new product scope:
 - React + Vite + TypeScript
 - React Router for navigation
 - service-based API layer
-- localStorage for auth session placeholder, print settings, and lab settings
+- cookie-backed auth session via same-origin requests
+- localStorage only for print settings and lab settings
 
 ### Backend
 - Express
 - PostgreSQL with plain SQL through `pg`
 - one main SQL access file: `anapath-back/src/db/queries.js`
 - API envelope: `{ success, message?, data }`
+- request-scoped DB policy context for tenant isolation
+- forced PostgreSQL RLS on lab-scoped data tables
+- append-only audit events and backend-only report revision snapshots
 
 ### Data model
 - one patient -> many exams
@@ -239,9 +259,10 @@ Recent stabilization work focused on safety rather than new product scope:
 - report templates are standalone
 
 ### Laboratory scoping
-- Requests carry `X-Laboratory-Id`
-- the backend scopes data access by laboratory
-- current auth is still placeholder, so this is workflow scoping rather than full security-grade multi-tenancy
+- the backend derives the current laboratory from the authenticated server session
+- application queries remain lab-scoped
+- PostgreSQL RLS now adds DB-side tenant defense-in-depth on lab-scoped tables
+- this is still a single-doctor/admin workflow, not a broad enterprise tenant administration product
 
 ## Run and test locally
 
@@ -256,6 +277,7 @@ npm install
 cp .env.example .env
 psql -d anapath -f src/db/schema.sql
 psql -d anapath -f src/db/seed.sql
+npm run bootstrap:admin
 npm run dev
 ```
 
@@ -269,8 +291,13 @@ npm run dev
 ### Useful checks
 ```bash
 cd anapath-back && npm test
+cd anapath-back && npm run security:audit:prod
+cd anapath-back && npm run db:role:check
+cd anapath-back && npm run db:rls:check
 cd anapath-front && npm test
 cd anapath-front && npx tsc --noEmit
+cd anapath-front && npm run security:audit:prod
+cd anapath-front && npm run security:csp:build-check
 ```
 
 ### Archive profiling
@@ -279,24 +306,25 @@ psql -d anapath -f anapath-back/src/db/archive_profile_fixture.sql
 psql -d anapath -f anapath-back/src/db/archive_profile_explain.sql
 ```
 
-### Default login
-- `admin@anapath.local`
-- `admin123`
+### Local/staging login
+- run `cd anapath-back && npm run bootstrap:admin`
+- then log in with `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`
 
 ## Voluntary limitations
 
 Anapath is intentionally not trying to do everything yet.
 
 Current deliberate limitations include:
-- placeholder auth, no JWT middleware
+- bootstrap-admin / local-staging oriented auth administration, with no self-service password reset or onboarding UI
 - no RBAC
 - no pagination
 - client-side PDF export only
 - lab settings stored locally, not synced through the backend
-- no audit trail or version history for reports
+- no doctor-facing audit history, diff viewer, or restore workflow
 - no CIN field on patients
 - no URL-persisted dashboard filters
-- no real enterprise-grade multi-tenant authorization
+- rate limiting remains process-local/in-memory
+- CSP is prepared for serving-layer `Report-Only`, but not yet enforceable because the current PDF export dependency path still fails strict CSP compatibility checks
 
 ## Where to read what
 

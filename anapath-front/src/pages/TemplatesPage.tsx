@@ -3,6 +3,7 @@ import { PageHeader } from '../components/PageHeader'
 import { PageContainer } from '../layouts/PageContainer'
 import { reportTemplateService } from '../services/reportTemplateService'
 import type { ReportTemplate } from '../types/domain'
+import { FORM_LIMITS } from '../utils/formLimits'
 import { truncate } from '../utils/formatting'
 
 interface TemplateEditState {
@@ -216,6 +217,7 @@ export function TemplatesPage() {
                             value={edit.name}
                             onChange={(e) => setEditState((prev) => ({ ...prev, [t.id]: { ...edit, name: e.target.value } }))}
                             disabled={isSaving}
+                            maxLength={FORM_LIMITS.templateName}
                           />
                         </div>
                         <div className="form-field">
@@ -226,6 +228,7 @@ export function TemplatesPage() {
                             value={edit.clinical_info}
                             onChange={(e) => setEditState((prev) => ({ ...prev, [t.id]: { ...edit, clinical_info: e.target.value } }))}
                             disabled={isSaving}
+                            maxLength={FORM_LIMITS.narrativeSection}
                           />
                         </div>
                         <div className="form-field">
@@ -236,6 +239,7 @@ export function TemplatesPage() {
                             value={edit.macroscopy}
                             onChange={(e) => setEditState((prev) => ({ ...prev, [t.id]: { ...edit, macroscopy: e.target.value } }))}
                             disabled={isSaving}
+                            maxLength={FORM_LIMITS.narrativeSection}
                           />
                         </div>
                         <div className="form-field">
@@ -246,6 +250,7 @@ export function TemplatesPage() {
                             value={edit.microscopy}
                             onChange={(e) => setEditState((prev) => ({ ...prev, [t.id]: { ...edit, microscopy: e.target.value } }))}
                             disabled={isSaving}
+                            maxLength={FORM_LIMITS.narrativeSection}
                           />
                         </div>
                         <div className="form-field">
@@ -256,6 +261,7 @@ export function TemplatesPage() {
                             value={edit.conclusion}
                             onChange={(e) => setEditState((prev) => ({ ...prev, [t.id]: { ...edit, conclusion: e.target.value } }))}
                             disabled={isSaving}
+                            maxLength={FORM_LIMITS.narrativeSection}
                           />
                         </div>
                       </div>

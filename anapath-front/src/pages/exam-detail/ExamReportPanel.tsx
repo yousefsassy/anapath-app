@@ -1,6 +1,7 @@
 import type { Dispatch, FormEvent, KeyboardEvent, SetStateAction } from 'react'
 import { FormField } from '../../components/FormField'
 import type { ReportInput, ReportTemplate } from '../../types/domain'
+import { FORM_LIMITS } from '../../utils/formLimits'
 
 interface ExamReportPanelProps {
   report: ReportInput
@@ -165,6 +166,7 @@ export function ExamReportPanel({
               value={report.clinical_info}
               disabled={isReportLoading || isSubmitting || isReportLocked}
               onChange={(e) => setReport({ ...report, clinical_info: e.target.value })}
+              maxLength={FORM_LIMITS.narrativeSection}
             />
           </FormField>
 
@@ -175,6 +177,7 @@ export function ExamReportPanel({
               value={report.macroscopy}
               disabled={isReportLoading || isSubmitting || isReportLocked}
               onChange={(e) => setReport({ ...report, macroscopy: e.target.value })}
+              maxLength={FORM_LIMITS.narrativeSection}
             />
           </FormField>
 
@@ -185,6 +188,7 @@ export function ExamReportPanel({
               value={report.microscopy}
               disabled={isReportLoading || isSubmitting || isReportLocked}
               onChange={(e) => setReport({ ...report, microscopy: e.target.value })}
+              maxLength={FORM_LIMITS.narrativeSection}
             />
           </FormField>
 
@@ -195,6 +199,7 @@ export function ExamReportPanel({
               value={report.conclusion}
               disabled={isReportLoading || isSubmitting || isReportLocked}
               onChange={(e) => setReport({ ...report, conclusion: e.target.value })}
+              maxLength={FORM_LIMITS.narrativeSection}
             />
           </FormField>
         </div>
@@ -216,6 +221,7 @@ export function ExamReportPanel({
               disabled={isSavingTemplate}
               onKeyDown={handleTemplateNameKeyDown}
               autoFocus
+              maxLength={FORM_LIMITS.templateName}
             />
             <button
               type="button"

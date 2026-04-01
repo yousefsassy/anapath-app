@@ -6,6 +6,7 @@ import { PageHeader } from '../components/PageHeader'
 import { PageContainer } from '../layouts/PageContainer'
 import { examService } from '../services/examService'
 import type { NewExamInput } from '../types/domain'
+import { FORM_LIMITS } from '../utils/formLimits'
 
 const initialFormState: Omit<NewExamInput, 'patient_id'> = {
   exam_type: 'histology',
@@ -114,6 +115,7 @@ export function NewExamPage() {
                   placeholder="ex. Biopsie cutanée, Splénectomie…"
                   value={form.sample_nature}
                   onChange={(e) => setForm({ ...form, sample_nature: e.target.value })}
+                  maxLength={FORM_LIMITS.fixedExamField}
                 />
               </FormField>
 
@@ -123,6 +125,7 @@ export function NewExamPage() {
                   placeholder="Nom du médecin demandeur"
                   value={form.requesting_doctor}
                   onChange={(e) => setForm({ ...form, requesting_doctor: e.target.value })}
+                  maxLength={FORM_LIMITS.fixedExamField}
                 />
               </FormField>
 
@@ -132,6 +135,7 @@ export function NewExamPage() {
                   placeholder="Nom de la clinique ou de l'hôpital"
                   value={form.clinic_name}
                   onChange={(e) => setForm({ ...form, clinic_name: e.target.value })}
+                  maxLength={FORM_LIMITS.fixedExamField}
                 />
               </FormField>
 
@@ -201,6 +205,7 @@ export function NewExamPage() {
                   placeholder="Antécédents, motif de la demande, données cliniques pertinentes…"
                   value={form.exam_history}
                   onChange={(e) => setForm({ ...form, exam_history: e.target.value })}
+                  maxLength={FORM_LIMITS.examHistory}
                 />
               </FormField>
 

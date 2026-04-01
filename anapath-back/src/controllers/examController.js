@@ -1,71 +1,37 @@
 import {
+  appendAuditEvent,
   findAllExams,
   findExamById,
   createExamWithReport,
+  createEmptyReportForExamId,
+  createReportRevision,
+  findLatestReportRevisionByExamId,
+  findReportByExamId,
   updateExamById,
   clearResultIssuedDateForExam,
   getExamStats,
 } from '../db/queries.js';
-import {
-  VALID_EXAM_STATUSES,
-  VALID_EXAM_TYPES,
-  buildRequiredFieldsMessage,
-  parsePositiveInteger,
-  validateDateRange,
-  validateOptionalIsoDate,
-} from '../utils/requestValidation.js';
+import { withDbTransaction } from '../config/database.js';
 import { resolveLaboratoryId } from '../utils/requestContext.js';
+import { buildDbPolicyContext } from '../utils/dbPolicyContext.js';
+import {
+  buildAuditRequestContext,
+  reportSnapshotChanged,
+} from '../utils/auditTrail.js';
 
-const EXAM_FIELD_LABELS = {
-  patient_id: 'patient',
-  exam_type: "type d'examen",
-};
-
-function validateExamPayload(payload) {
-  const missingFieldsMessage = buildRequiredFieldsMessage(
-    ['patient_id', 'exam_type'],
-    payload,
-    EXAM_FIELD_LABELS
-  );
-  if (missingFieldsMessage) {
-    return missingFieldsMessage;
-  }
-
-  if (!parsePositiveInteger(payload.patient_id)) {
-    return 'Identifiant patient invalide.';
-  }
-
-  if (!VALID_EXAM_TYPES.includes(payload.exam_type)) {
-    return `Type d'examen invalide. Valeurs acceptées : ${VALID_EXAM_TYPES.join(', ')}`;
-  }
-
-  if (payload.status !== undefined && !VALID_EXAM_STATUSES.includes(payload.status)) {
-    return `Statut invalide. Valeurs acceptées : ${VALID_EXAM_STATUSES.join(', ')}`;
-  }
-
-  const requestedDateError = validateOptionalIsoDate(payload.requested_date, 'la date de demande');
-  if (requestedDateError) {
-    return requestedDateError;
-  }
-
-  const registeredDateError = validateOptionalIsoDate(
-    payload.registered_date,
-    "la date d'enregistrement"
-  );
-  if (registeredDateError) {
-    return registeredDateError;
-  }
-
-  const resultIssuedDateError = validateOptionalIsoDate(
-    payload.result_issued_date,
-    "la date d'émission du résultat"
-  );
-  if (resultIssuedDateError) {
-    return resultIssuedDateError;
-  }
-
-  return null;
-}
+const EDITABLE_FIELDS = [
+  'exam_type',
+  'clinic_name',
+  'requesting_doctor',
+  'requested_date',
+  'registered_date',
+  'result_issued_date',
+  'sample_nature',
+  'exam_history',
+  'diagnosis_keywords',
+  'status',
+  'urgent',
+];
 
 export async function getStats(req, res, next) {
   try {
@@ -74,8 +40,8 @@ export async function getStats(req, res, next) {
     return res.json({
       success: true,
       data: {
-        registered_count:     parseInt(raw.registered_count, 10),
-        in_progress_count:    parseInt(raw.in_progress_count, 10),
+        registered_count: parseInt(raw.registered_count, 10),
+        in_progress_count: parseInt(raw.in_progress_count, 10),
         completed_this_month: parseInt(raw.completed_this_month, 10),
       },
     });
@@ -87,33 +53,16 @@ export async function getStats(req, res, next) {
 export async function getExams(req, res, next) {
   try {
     const labId = resolveLaboratoryId(req);
-    if (req.query.status && !VALID_EXAM_STATUSES.includes(req.query.status)) {
-      return res.status(400).json({
-        success: false,
-        message: `Statut invalide. Valeurs acceptées : ${VALID_EXAM_STATUSES.join(', ')}`,
-      });
-    }
-    if (req.query.exam_type && !VALID_EXAM_TYPES.includes(req.query.exam_type)) {
-      return res.status(400).json({
-        success: false,
-        message: `Type d'examen invalide. Valeurs acceptées : ${VALID_EXAM_TYPES.join(', ')}`,
-      });
-    }
-    const dateRangeError = validateDateRange(req.query.date_from, req.query.date_to);
-    if (dateRangeError) {
-      return res.status(400).json({
-        success: false,
-        message: dateRangeError,
-      });
-    }
+    const query = req.validated?.query ?? req.query;
     const filters = {
-      ...(req.query.status ? { status: req.query.status } : {}),
-      ...(req.query.exam_type ? { exam_type: req.query.exam_type } : {}),
-      ...(req.query.search?.trim() ? { search: req.query.search.trim() } : {}),
-      ...(req.query.date_from ? { date_from: req.query.date_from } : {}),
-      ...(req.query.date_to ? { date_to: req.query.date_to } : {}),
-      ...(req.query.keyword?.trim() ? { keyword: req.query.keyword.trim() } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.exam_type ? { exam_type: query.exam_type } : {}),
+      ...(query.search ? { search: query.search } : {}),
+      ...(query.date_from ? { date_from: query.date_from } : {}),
+      ...(query.date_to ? { date_to: query.date_to } : {}),
+      ...(query.keyword ? { keyword: query.keyword } : {}),
     };
+
     const exams = await findAllExams(filters, labId);
     return res.status(200).json({ success: true, data: exams });
   } catch (error) {
@@ -124,27 +73,23 @@ export async function getExams(req, res, next) {
 export async function createExam(req, res, next) {
   try {
     const labId = resolveLaboratoryId(req);
-    const error = validateExamPayload(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error });
-    }
+    const body = req.validated?.body ?? req.body;
 
     const result = await createExamWithReport({
       laboratory_id: labId,
-      patient_id: Number(req.body.patient_id),
-      exam_type: req.body.exam_type,
-      clinic_name: req.body.clinic_name || '',
-      requesting_doctor: req.body.requesting_doctor || '',
-      requested_date: req.body.requested_date || null,
-      registered_date: req.body.registered_date || new Date().toISOString().slice(0, 10),
-      result_issued_date: req.body.result_issued_date || null,
-      sample_nature: req.body.sample_nature || '',
-      exam_history: req.body.exam_history || '',
-      diagnosis_keywords: Array.isArray(req.body.diagnosis_keywords)
-        ? req.body.diagnosis_keywords
-        : [],
-      status: req.body.status || 'registered',
-      urgent: toBoolean(req.body.urgent),
+      dbPolicyContext: buildDbPolicyContext(req),
+      patient_id: body.patient_id,
+      exam_type: body.exam_type,
+      clinic_name: body.clinic_name || '',
+      requesting_doctor: body.requesting_doctor || '',
+      requested_date: body.requested_date || null,
+      registered_date: body.registered_date || new Date().toISOString().slice(0, 10),
+      result_issued_date: body.result_issued_date || null,
+      sample_nature: body.sample_nature || '',
+      exam_history: body.exam_history || '',
+      diagnosis_keywords: body.diagnosis_keywords || [],
+      status: body.status || 'registered',
+      urgent: body.urgent === true,
     });
 
     if (result.error === 'PATIENT_NOT_FOUND') {
@@ -167,11 +112,7 @@ export async function createExam(req, res, next) {
 export async function getExamById(req, res, next) {
   try {
     const labId = resolveLaboratoryId(req);
-    const examId = parsePositiveInteger(req.params.id);
-    if (!examId) {
-      return res.status(400).json({ success: false, message: 'Identifiant prélèvement invalide.' });
-    }
-
+    const examId = req.validated?.params?.id;
     const exam = await findExamById(examId, labId);
 
     if (!exam) {
@@ -184,141 +125,133 @@ export async function getExamById(req, res, next) {
   }
 }
 
-const EDITABLE_FIELDS = [
-  'exam_type',
-  'clinic_name',
-  'requesting_doctor',
-  'requested_date',
-  'registered_date',
-  'result_issued_date',
-  'sample_nature',
-  'exam_history',
-  'diagnosis_keywords',
-  'status',
-  'urgent',
-];
-
-// Robustly coerce a request body value to boolean.
-// Accepts true, 1, 'true', '1' as true; everything else as false.
-function toBoolean(value) {
-  return value === true || value === 1 || value === 'true' || value === '1';
-}
-
-const READ_ONLY_FIELDS = [
-  'id',
-  'patient_id',
-  'exam_number',
-  'laboratory_id',
-  'created_at',
-  'updated_at',
-];
-
 export async function updateExam(req, res, next) {
   try {
     const labId = resolveLaboratoryId(req);
-    const examId = parsePositiveInteger(req.params.id);
-    if (!examId) {
-      return res.status(400).json({ success: false, message: 'Identifiant prélèvement invalide.' });
-    }
+    const examId = req.validated?.params?.id;
+    const body = req.validated?.body ?? req.body;
+    const auditContext = buildAuditRequestContext(req, {
+      laboratoryId: labId,
+    });
 
-    const exam = await findExamById(examId, labId);
+    const result = await withDbTransaction(async (client) => {
+      const exam = await findExamById(examId, labId, client);
 
-    if (!exam) {
+      if (!exam) {
+        return { error: 'EXAM_NOT_FOUND' };
+      }
+
+      const updateKeys = Object.keys(body).filter((field) => body[field] !== undefined);
+
+      if (
+        exam.status === 'completed' &&
+        !(updateKeys.length === 1 && body.status === 'in_progress')
+      ) {
+        return { error: 'VALIDATED_EXAM_LOCKED' };
+      }
+
+      const updatePayload = Object.fromEntries(
+        EDITABLE_FIELDS
+          .filter((field) => body[field] !== undefined)
+          .map((field) => [field, body[field]])
+      );
+
+      if (
+        updatePayload.status === 'completed' &&
+        !exam.result_issued_date &&
+        !updatePayload.result_issued_date
+      ) {
+        updatePayload.result_issued_date = new Date().toISOString().slice(0, 10);
+      }
+
+      let updatedExam = await updateExamById(examId, labId, updatePayload, client);
+      let createdRevision = null;
+
+      if (updatePayload.status === 'completed' && exam.status !== 'completed') {
+        let report = await findReportByExamId(examId, labId, client);
+
+        if (!report) {
+          await createEmptyReportForExamId(examId, labId, client);
+          report = await findReportByExamId(examId, labId, client);
+        }
+
+        if (report) {
+          const latestRevision = await findLatestReportRevisionByExamId(examId, labId, client);
+          if (reportSnapshotChanged(report, latestRevision)) {
+            createdRevision = await createReportRevision({
+              laboratory_id: labId,
+              exam_id: examId,
+              report_id: report.id,
+              actor_user_id: auditContext.userId,
+              actor_session_id: auditContext.sessionId,
+              request_id: auditContext.requestId,
+              snapshot_reason: 'validation',
+              ...report,
+            }, client);
+          }
+        }
+
+        await appendAuditEvent({
+          laboratory_id: labId,
+          actor_user_id: auditContext.userId,
+          actor_session_id: auditContext.sessionId,
+          request_id: auditContext.requestId,
+          event_type: 'exam_validated',
+          target_type: 'exam',
+          target_id: updatedExam.id,
+          ip_address: auditContext.ipAddress,
+          user_agent: auditContext.userAgent,
+          metadata: {
+            previous_status: exam.status,
+            next_status: 'completed',
+            revision_created: Boolean(createdRevision),
+            report_revision_id: createdRevision?.id ?? null,
+            snapshot_reason: 'validation',
+          },
+        }, client);
+      }
+
+      if (updatePayload.status === 'in_progress' && exam.status === 'completed') {
+        updatedExam = await clearResultIssuedDateForExam(examId, labId, client);
+
+        await appendAuditEvent({
+          laboratory_id: labId,
+          actor_user_id: auditContext.userId,
+          actor_session_id: auditContext.sessionId,
+          request_id: auditContext.requestId,
+          event_type: 'exam_reopened',
+          target_type: 'exam',
+          target_id: updatedExam.id,
+          ip_address: auditContext.ipAddress,
+          user_agent: auditContext.userAgent,
+          metadata: {
+            previous_status: exam.status,
+            next_status: 'in_progress',
+            result_issued_date_cleared: true,
+          },
+        }, client);
+      }
+
+      return { updatedExam };
+    }, {
+      context: buildDbPolicyContext(req),
+    });
+
+    if (result.error === 'EXAM_NOT_FOUND') {
       return res.status(404).json({ success: false, message: 'Prélèvement introuvable.' });
     }
 
-    const updateKeys = Object.keys(req.body).filter((field) => req.body[field] !== undefined);
-
-    if (
-      exam.status === 'completed' &&
-      !(updateKeys.length === 1 && req.body.status === 'in_progress')
-    ) {
+    if (result.error === 'VALIDATED_EXAM_LOCKED') {
       return res.status(403).json({
         success: false,
         message: 'Ce prélèvement est déjà validé. Rouvrez le dossier avant toute correction.',
       });
     }
 
-    const forbiddenField = READ_ONLY_FIELDS.find((field) => req.body[field] !== undefined);
-    if (forbiddenField) {
-      return res.status(400).json({
-        success: false,
-        message: `Le champ ${forbiddenField} est en lecture seule et ne peut pas être modifié.`,
-      });
-    }
-
-    if (req.body.exam_type !== undefined && !VALID_EXAM_TYPES.includes(req.body.exam_type)) {
-      return res.status(400).json({
-        success: false,
-        message: `Type d'examen invalide. Valeurs acceptées : ${VALID_EXAM_TYPES.join(', ')}`,
-      });
-    }
-
-    if (req.body.status !== undefined && !VALID_EXAM_STATUSES.includes(req.body.status)) {
-      return res.status(400).json({
-        success: false,
-        message: `Statut invalide. Valeurs acceptées : ${VALID_EXAM_STATUSES.join(', ')}`,
-      });
-    }
-
-    const requestedDateError = validateOptionalIsoDate(req.body.requested_date, 'la date de demande');
-    if (requestedDateError) {
-      return res.status(400).json({ success: false, message: requestedDateError });
-    }
-
-    const registeredDateError = validateOptionalIsoDate(
-      req.body.registered_date,
-      "la date d'enregistrement"
-    );
-    if (registeredDateError) {
-      return res.status(400).json({ success: false, message: registeredDateError });
-    }
-
-    const resultIssuedDateError = validateOptionalIsoDate(
-      req.body.result_issued_date,
-      "la date d'émission du résultat"
-    );
-    if (resultIssuedDateError) {
-      return res.status(400).json({ success: false, message: resultIssuedDateError });
-    }
-
-    const updatePayload = Object.fromEntries(
-      EDITABLE_FIELDS
-        .filter((field) => req.body[field] !== undefined)
-        .map((field) => [field, req.body[field]])
-    );
-
-    if (Object.keys(updatePayload).length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Aucun champ modifiable fourni pour la mise à jour.',
-      });
-    }
-
-    if ('urgent' in updatePayload) {
-      updatePayload.urgent = toBoolean(updatePayload.urgent);
-    }
-
-    // Auto-set result_issued_date when transitioning to completed, if not already set
-    if (
-      updatePayload.status === 'completed' &&
-      !exam.result_issued_date &&
-      !updatePayload.result_issued_date
-    ) {
-      updatePayload.result_issued_date = new Date().toISOString().slice(0, 10);
-    }
-
-    let updatedExam = await updateExamById(examId, labId, updatePayload);
-
-    // On reopen: clear result_issued_date only when transitioning completed → in_progress
-    if (updatePayload.status === 'in_progress' && exam.status === 'completed') {
-      updatedExam = await clearResultIssuedDateForExam(examId, labId);
-    }
-
     return res.status(200).json({
       success: true,
       message: 'Prélèvement mis à jour.',
-      data: updatedExam,
+      data: result.updatedExam,
     });
   } catch (error) {
     return next(error);

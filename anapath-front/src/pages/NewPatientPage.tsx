@@ -7,6 +7,7 @@ import { PageContainer } from '../layouts/PageContainer'
 import { patientService } from '../services/patientService'
 import type { NewPatientInput, Patient, SexDisplay } from '../types/domain'
 import { displaySexFrench } from '../utils/domainMappings'
+import { FORM_LIMITS } from '../utils/formLimits'
 
 const initialFormState: NewPatientInput = {
   first_name: '',
@@ -122,6 +123,7 @@ export function NewPatientPage() {
                   id="first_name"
                   value={form.first_name}
                   onChange={(e) => setForm({ ...form, first_name: e.target.value })}
+                  maxLength={FORM_LIMITS.patientName}
                 />
               </FormField>
 
@@ -130,6 +132,7 @@ export function NewPatientPage() {
                   id="last_name"
                   value={form.last_name}
                   onChange={(e) => setForm({ ...form, last_name: e.target.value })}
+                  maxLength={FORM_LIMITS.patientName}
                 />
               </FormField>
 
@@ -163,6 +166,7 @@ export function NewPatientPage() {
                   id="phone"
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  maxLength={FORM_LIMITS.phone}
                 />
               </FormField>
 
@@ -194,6 +198,7 @@ export function NewPatientPage() {
                   rows={5}
                   value={form.general_history}
                   onChange={(e) => setForm({ ...form, general_history: e.target.value })}
+                  maxLength={FORM_LIMITS.patientGeneralHistory}
                 />
               </FormField>
             </div>

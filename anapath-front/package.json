@@ -8,6 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
+    "security:audit:prod": "npm audit --omit=dev --audit-level=high",
+    "security:audit:full": "npm audit --audit-level=moderate",
+    "security:csp:check": "node scripts/checkCspBuild.js",
+    "security:csp:build-check": "npm run build && npm run security:csp:check",
     "preview": "vite preview"
   },
   "dependencies": {

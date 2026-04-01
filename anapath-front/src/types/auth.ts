@@ -3,7 +3,7 @@ export interface AuthUser {
   laboratory_id: number
   email: string
   role: string
-  token: string
+  full_name: string | null
 }
 
 export interface LoginPayload {

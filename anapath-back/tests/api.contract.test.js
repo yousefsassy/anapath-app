@@ -5,17 +5,24 @@ import http from 'node:http';
 import test, { after, before } from 'node:test';
 import app from '../src/app.js';
 import pool, { query } from '../src/config/database.js';
+import { createPasswordHash } from '../src/utils/passwordSecurity.js';
 
 let server;
 let baseUrl = '';
 let labId = null;
+let sessionCookie = '';
 
-async function apiRequest(method, path, body) {
+const adminEmail = 'contract-admin@anapath.local';
+const adminPassword = 'ContratAdminPassword123!';
+const defaultIp = '10.20.30.40';
+
+async function apiRequest(method, path, { body, cookie = sessionCookie, ip = defaultIp } = {}) {
   const response = await fetch(`${baseUrl}/api${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
-      ...(labId ? { 'X-Laboratory-Id': String(labId) } : {}),
+      ...(cookie ? { Cookie: cookie } : {}),
+      'X-Forwarded-For': ip,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -25,6 +32,7 @@ async function apiRequest(method, path, body) {
   return {
     status: response.status,
     payload,
+    cookie: response.headers.get('set-cookie')?.split(';')[0] || '',
   };
 }
 
@@ -33,10 +41,21 @@ before(async () => {
     `INSERT INTO laboratories (name, address, phone, email)
      VALUES ($1, '', '', '')
      RETURNING id`,
-    [`P3 test lab ${randomUUID()}`]
+    [`P1 contract lab ${randomUUID()}`]
   );
 
   labId = createdLab.rows[0].id;
+
+  await query(
+    `INSERT INTO users (laboratory_id, full_name, email, password_hash, role)
+     VALUES ($1, $2, $3, $4, 'admin')`,
+    [
+      labId,
+      'Contract Admin',
+      adminEmail,
+      await createPasswordHash(adminPassword),
+    ]
+  );
 
   server = http.createServer(app);
   server.listen(0, '127.0.0.1');
@@ -48,6 +67,17 @@ before(async () => {
   }
 
   baseUrl = `http://127.0.0.1:${address.port}`;
+
+  const loginResponse = await apiRequest('POST', '/auth/login', {
+    body: {
+      email: adminEmail,
+      password: adminPassword,
+    },
+  });
+
+  assert.equal(loginResponse.status, 200);
+  assert.ok(loginResponse.cookie);
+  sessionCookie = loginResponse.cookie;
 });
 
 after(async () => {
@@ -80,15 +110,28 @@ test('critical API contracts stay stable across the main workflows', async (t) =
   let examId;
   let templateId;
 
+  await t.test('session endpoint exposes the authenticated user context', async () => {
+    const { status, payload } = await apiRequest('GET', '/auth/session');
+
+    assert.equal(status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.data.email, adminEmail);
+    assert.equal(payload.data.laboratory_id, labId);
+    assert.equal(payload.data.full_name, 'Contract Admin');
+    assert.equal(payload.data.token, undefined);
+  });
+
   await t.test('patient creation contract', async () => {
     const { status, payload } = await apiRequest('POST', '/patients', {
-      first_name: 'Nadia',
-      last_name: 'Test P3',
-      age: 52,
-      sex: 'F',
-      phone: '0700000000',
-      birth_date: '1974-02-10',
-      general_history: 'ATCD de surveillance annuelle.',
+      body: {
+        first_name: 'Nadia',
+        last_name: 'Test P1',
+        age: 52,
+        sex: 'F',
+        phone: '0700000000',
+        birth_date: '1974-02-10',
+        general_history: 'ATCD de surveillance annuelle.',
+      },
     });
 
     assert.equal(status, 201);
@@ -100,18 +143,20 @@ test('critical API contracts stay stable across the main workflows', async (t) =
 
   await t.test('exam creation auto-creates a report', async () => {
     const { status, payload } = await apiRequest('POST', '/exams', {
-      patient_id: patientId,
-      exam_type: 'histology',
-      clinic_name: 'Clinique P3',
-      requesting_doctor: 'Dr Stabilisation',
-      requested_date: '2026-04-01',
-      registered_date: '2026-04-02',
-      result_issued_date: null,
-      sample_nature: 'Biopsie thyroidienne',
-      exam_history: 'Nodule thyroidien suspect avec microcalcifications.',
-      diagnosis_keywords: ['papillaire', 'thyroide', 'carcinome'],
-      status: 'registered',
-      urgent: false,
+      body: {
+        patient_id: patientId,
+        exam_type: 'histology',
+        clinic_name: 'Clinique P1',
+        requesting_doctor: 'Dr Stabilisation',
+        requested_date: '2026-04-01',
+        registered_date: '2026-04-02',
+        result_issued_date: null,
+        sample_nature: 'Biopsie thyroidienne',
+        exam_history: 'Nodule thyroidien suspect avec microcalcifications.',
+        diagnosis_keywords: ['papillaire', 'thyroide', 'carcinome'],
+        status: 'registered',
+        urgent: false,
+      },
     });
 
     assert.equal(status, 201);
@@ -136,7 +181,9 @@ test('critical API contracts stay stable across the main workflows', async (t) =
       conclusion: 'Aspect suspect de carcinome papillaire thyroidien.',
     };
 
-    const saveResponse = await apiRequest('PUT', `/reports/${examId}`, reportDraft);
+    const saveResponse = await apiRequest('PUT', `/reports/${examId}`, {
+      body: reportDraft,
+    });
     assert.equal(saveResponse.status, 200);
     assert.equal(saveResponse.payload.success, true);
     assert.equal(saveResponse.payload.data.conclusion, reportDraft.conclusion);
@@ -148,11 +195,13 @@ test('critical API contracts stay stable across the main workflows', async (t) =
 
   await t.test('template CRUD stays functional', async () => {
     const createResponse = await apiRequest('POST', '/report-templates', {
-      name: 'Modele P3',
-      clinical_info: 'RC P3',
-      macroscopy: 'Macro P3',
-      microscopy: 'Micro P3',
-      conclusion: 'Conclusion P3',
+      body: {
+        name: 'Modele P1',
+        clinical_info: 'RC P1',
+        macroscopy: 'Macro P1',
+        microscopy: 'Micro P1',
+        conclusion: 'Conclusion P1',
+      },
     });
 
     assert.equal(createResponse.status, 201);
@@ -164,15 +213,17 @@ test('critical API contracts stay stable across the main workflows', async (t) =
     assert.ok(listResponse.payload.data.some((template) => template.id === templateId));
 
     const updateResponse = await apiRequest('PUT', `/report-templates/${templateId}`, {
-      name: 'Modele P3 mis a jour',
-      clinical_info: 'RC mis a jour',
-      macroscopy: 'Macro P3',
-      microscopy: 'Micro P3',
-      conclusion: 'Conclusion P3',
+      body: {
+        name: 'Modele P1 mis a jour',
+        clinical_info: 'RC mis a jour',
+        macroscopy: 'Macro P1',
+        microscopy: 'Micro P1',
+        conclusion: 'Conclusion P1',
+      },
     });
 
     assert.equal(updateResponse.status, 200);
-    assert.equal(updateResponse.payload.data.name, 'Modele P3 mis a jour');
+    assert.equal(updateResponse.payload.data.name, 'Modele P1 mis a jour');
 
     const deleteResponse = await apiRequest('DELETE', `/report-templates/${templateId}`);
     assert.equal(deleteResponse.status, 200);
@@ -181,7 +232,9 @@ test('critical API contracts stay stable across the main workflows', async (t) =
 
   await t.test('validation locks the report and exposes the case in archive search', async () => {
     const validateResponse = await apiRequest('PUT', `/exams/${examId}`, {
-      status: 'completed',
+      body: {
+        status: 'completed',
+      },
     });
 
     assert.equal(validateResponse.status, 200);
@@ -190,15 +243,19 @@ test('critical API contracts stay stable across the main workflows', async (t) =
     assert.ok(validateResponse.payload.data.result_issued_date);
 
     const lockedReportResponse = await apiRequest('PUT', `/reports/${examId}`, {
-      clinical_info: 'Modification interdite',
-      macroscopy: '',
-      microscopy: '',
-      conclusion: '',
+      body: {
+        clinical_info: 'Modification interdite',
+        macroscopy: '',
+        microscopy: '',
+        conclusion: '',
+      },
     });
     assert.equal(lockedReportResponse.status, 403);
 
     const forbiddenExamEdit = await apiRequest('PUT', `/exams/${examId}`, {
-      sample_nature: 'Correction interdite apres validation',
+      body: {
+        sample_nature: 'Correction interdite apres validation',
+      },
     });
     assert.equal(forbiddenExamEdit.status, 403);
 
@@ -222,7 +279,9 @@ test('critical API contracts stay stable across the main workflows', async (t) =
 
   await t.test('reopen clears issued date and restores report edition', async () => {
     const reopenResponse = await apiRequest('PUT', `/exams/${examId}`, {
-      status: 'in_progress',
+      body: {
+        status: 'in_progress',
+      },
     });
 
     assert.equal(reopenResponse.status, 200);
@@ -230,10 +289,12 @@ test('critical API contracts stay stable across the main workflows', async (t) =
     assert.equal(reopenResponse.payload.data.result_issued_date, null);
 
     const saveAfterReopen = await apiRequest('PUT', `/reports/${examId}`, {
-      clinical_info: 'Nodule thyroidien suspect apres reouverture.',
-      macroscopy: 'Deux fragments beigeatres de petite taille.',
-      microscopy: 'Architecture papillaire avec atypies nucleaires persistantes.',
-      conclusion: 'Controle apres reouverture du dossier.',
+      body: {
+        clinical_info: 'Nodule thyroidien suspect apres reouverture.',
+        macroscopy: 'Deux fragments beigeatres de petite taille.',
+        microscopy: 'Architecture papillaire avec atypies nucleaires persistantes.',
+        conclusion: 'Controle apres reouverture du dossier.',
+      },
     });
 
     assert.equal(saveAfterReopen.status, 200);

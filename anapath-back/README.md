@@ -15,7 +15,7 @@ For the technical source of truth across the whole repo, see root [CLAUDE.md](..
 ## What this package is responsible for
 
 The backend provides:
-- placeholder login
+- cookie-backed login/session/logout
 - patient CRUD
 - patient exam history
 - exam list/detail/create/update
@@ -23,6 +23,8 @@ The backend provides:
 - report template CRUD
 - lab-scoped dashboard stats
 - case archive search and preview
+- request-scoped DB policy context + PostgreSQL RLS tenant defense-in-depth
+- append-only audit events and minimal backend-only report revision snapshots
 
 ## Project structure
 
@@ -43,8 +45,7 @@ anapath-back/
 │   ├── middlewares/
 │   ├── routes/
 │   └── utils/
-├── tests/
-│   └── api.contract.test.js
+├── tests/              # contract + security regression tests
 ├── server.js
 ├── .env.example
 └── package.json
@@ -88,12 +89,23 @@ Load seed data:
 psql -d anapath -f src/db/seed.sql
 ```
 
+Create or rotate the local/staging admin:
+
+```bash
+npm run bootstrap:admin
+```
+
 ## Useful scripts
 
 ```bash
 npm run dev
 npm start
 npm test
+npm run bootstrap:admin
+npm run security:audit:prod
+npm run security:audit:full
+npm run db:role:check
+npm run db:rls:check
 npm run db:schema
 npm run db:seed
 ```
@@ -102,6 +114,8 @@ npm run db:seed
 
 - `GET /api/health`
 - `POST /api/auth/login`
+- `GET /api/auth/session`
+- `POST /api/auth/logout`
 - `GET /api/patients`
 - `POST /api/patients`
 - `GET /api/patients/search`
@@ -126,21 +140,28 @@ npm run db:seed
 
 - All responses follow `{ success, message?, data }`.
 - User-facing API messages are in French.
-- Authenticated requests are lab-scoped through `X-Laboratory-Id`.
+- Authenticated requests are lab-scoped through the server-side session, not through a trusted frontend lab header.
+- Protected business requests apply a request-scoped DB policy context before tenant-scoped queries/transactions.
+- Forced PostgreSQL RLS is enabled on lab-scoped business/security tables for tenant defense-in-depth.
 - `GET /api/exams/stats` must stay registered before `GET /api/exams/:id`.
 - Exam creation auto-creates the linked report.
 - Report updates are blocked when `exam.status === 'completed'`.
 - Once an exam is already `completed`, direct metadata correction is blocked.
 - The only allowed post-validation mutation is `status: 'in_progress'` to reopen the case.
 - Reopening clears `result_issued_date`.
+- Audit events are append-only and currently cover login success/failure, logout, explicit report save, validation, and reopen.
+- Report revisions are backend-only snapshots created on explicit save/validation when the narrative changed.
 
 ## Tests
 
-Minimal backend contract tests are present in:
+Backend tests are present in:
 
 - [tests/api.contract.test.js](tests/api.contract.test.js)
+- [tests/security.auth.test.js](tests/security.auth.test.js)
+- [tests/security.validation.test.js](tests/security.validation.test.js)
+- [tests/security.audit.test.js](tests/security.audit.test.js)
 
-They cover:
+Coverage includes:
 - patient creation
 - exam creation
 - report load/save
@@ -148,6 +169,12 @@ They cover:
 - template CRUD
 - archive search
 - archive preview
+- authentication/session invalidation
+- login throttling
+- request validation hardening
+- log redaction / request-id checks
+- DB policy context + RLS catalog checks
+- audit ledger writes and report revision behavior
 
 Run them with:
 
@@ -173,9 +200,10 @@ psql -d anapath -f src/db/archive_profile_explain.sql
 
 ## Known backend limitations
 
-- auth is still placeholder
-- no JWT verification middleware
+- bootstrap admin creation is env-driven for local/staging
 - no RBAC
 - no pagination
-- no audit trail/version history for reports
+- no doctor-facing audit/history UI or restore workflow
+- rate limiting is still process-local / in-memory
+- CSP enforcement lives at the real frontend serving layer and is not handled directly by this package
 - archive search stays on PostgreSQL full-text search, with no external search engine

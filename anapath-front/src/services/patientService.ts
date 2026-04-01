@@ -1,6 +1,5 @@
 import type { Exam, ExamWithReportSummary, NewPatientInput, Patient } from '../types/domain'
 import { ApiClientError, apiClient } from './apiClient'
-import { authService } from './authService'
 import { mapSexDisplayToBackend } from '../utils/domainMappings'
 
 export interface UpdatePatientInput {
@@ -53,12 +52,6 @@ export const patientService = {
   },
 
   create: async (payload: NewPatientInput): Promise<Patient> => {
-    const authUser = authService.getCurrentUser()
-
-    if (!authUser) {
-      throw new Error('Session utilisateur indisponible.')
-    }
-
     return apiClient.post<Patient>('/patients', {
       ...payload,
       sex: mapSexDisplayToBackend(payload.sex),

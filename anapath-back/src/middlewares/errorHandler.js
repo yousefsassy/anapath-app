@@ -1,3 +1,5 @@
+import { getRequestLogger, serializeError } from '../utils/logger.js';
+
 export function notFoundHandler(req, res) {
   res.status(404).json({
     success: false,
@@ -6,10 +8,19 @@ export function notFoundHandler(req, res) {
 }
 
 export function errorHandler(err, req, res, next) {
-  console.error('Unhandled error:', err);
+  const status = Number.isInteger(err?.status) ? err.status : 500;
+  const message = status >= 500
+    ? 'Erreur interne du serveur.'
+    : err?.message || 'Requête impossible.';
+  const log = getRequestLogger(req);
 
-  res.status(err.status || 500).json({
+  log.error('request_failed', {
+    status,
+    error: serializeError(err),
+  });
+
+  res.status(status).json({
     success: false,
-    message: err.message || 'Erreur interne du serveur.',
+    message,
   });
 }

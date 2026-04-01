@@ -5,6 +5,7 @@ import { StatusBadge } from '../../components/StatusBadge'
 import type { UpdateExamInput } from '../../services/examService'
 import type { Exam } from '../../types/domain'
 import { formatDate } from '../../utils/formatting'
+import { FORM_LIMITS } from '../../utils/formLimits'
 
 interface ExamSummaryPanelProps {
   exam: Exam
@@ -57,7 +58,7 @@ export function ExamSummaryPanel({
               to={`/exams/${examId}/print`}
               className="button tertiary"
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
             >
               Aperçu PDF
             </Link>
@@ -138,6 +139,7 @@ export function ExamSummaryPanel({
                   value={examForm.requesting_doctor}
                   onChange={(e) => setExamForm({ ...examForm, requesting_doctor: e.target.value })}
                   disabled={isExamSubmitting}
+                  maxLength={FORM_LIMITS.fixedExamField}
                 />
               </FormField>
 
@@ -147,6 +149,7 @@ export function ExamSummaryPanel({
                   value={examForm.clinic_name}
                   onChange={(e) => setExamForm({ ...examForm, clinic_name: e.target.value })}
                   disabled={isExamSubmitting}
+                  maxLength={FORM_LIMITS.fixedExamField}
                 />
               </FormField>
 
@@ -187,6 +190,7 @@ export function ExamSummaryPanel({
                   value={examForm.sample_nature}
                   onChange={(e) => setExamForm({ ...examForm, sample_nature: e.target.value })}
                   disabled={isExamSubmitting}
+                  maxLength={FORM_LIMITS.fixedExamField}
                 />
               </FormField>
 
@@ -197,6 +201,7 @@ export function ExamSummaryPanel({
                   value={examForm.exam_history}
                   onChange={(e) => setExamForm({ ...examForm, exam_history: e.target.value })}
                   disabled={isExamSubmitting}
+                  maxLength={FORM_LIMITS.examHistory}
                 />
               </FormField>
 

@@ -7,7 +7,6 @@ import type {
   ReportInput,
 } from '../types/domain'
 import { ApiClientError, apiClient } from './apiClient'
-import { authService } from './authService'
 import { mapExamStatusToBackend } from '../utils/domainMappings'
 
 interface CreateExamPayload {
@@ -131,12 +130,6 @@ export const examService = {
   },
 
   create: async (payload: NewExamInput): Promise<Exam> => {
-    const authUser = authService.getCurrentUser()
-
-    if (!authUser) {
-      throw new Error('Session utilisateur indisponible.')
-    }
-
     const requestBody: CreateExamPayload = {
       patient_id: Number(payload.patient_id),
       exam_type: payload.exam_type,

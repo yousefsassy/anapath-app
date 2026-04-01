@@ -61,7 +61,7 @@ anapath-app/
         ├── pages/                      Route-level page components (see Frontend Pages table)
         ├── routes/                     ProtectedRoute
         ├── services/
-        │   ├── apiClient.ts            Generic authenticated HTTP client (+ `X-Laboratory-Id`)
+        │   ├── apiClient.ts            Generic same-origin authenticated HTTP client (`credentials: 'include'`)
         │   ├── authService.ts
         │   ├── caseArchiveService.ts
         │   ├── patientService.ts
@@ -83,12 +83,14 @@ anapath-app/
 
 **Base:** `http://localhost:5000`
 
-**Laboratory scoping:** all authenticated frontend requests inject `X-Laboratory-Id` from the current auth user. Backend controllers resolve the lab from this header and fall back to `1` only for the current placeholder auth flow.
+**Authentication/session model:** authenticated requests now use a same-origin `HttpOnly` session cookie (`anapath_session` by default). The backend resolves the current user and `laboratory_id` from the server-side session only. `X-Laboratory-Id` is no longer trusted.
 
 | Method | Route | Notes |
 |--------|-------|-------|
 | GET | `/api/health` | DB connectivity check |
-| POST | `/api/auth/login` | Placeholder credential check |
+| POST | `/api/auth/login` | Creates a server-side session + sets cookie |
+| GET | `/api/auth/session` | Returns current authenticated user context |
+| POST | `/api/auth/logout` | Revokes current session + clears cookie |
 | GET | `/api/patients` | List all patients |
 | POST | `/api/patients` | Create patient |
 | GET | `/api/patients/search` | Search by first_name, last_name, phone (up to 5 results) |
@@ -148,6 +150,18 @@ anapath-app/
 - `clearResultIssuedDateForExam(examId, laboratoryId)` — sets `result_issued_date = NULL` directly (bypasses COALESCE)
 - `findExamsByPatientIdWithReportSummary(patientId, laboratoryId)` — LEFT JOIN reports, returns `report_conclusion` + `report_updated_at`
 - `getExamStats(laboratoryId)` — single-row aggregate using PostgreSQL `FILTER (WHERE ...)` syntax; returns `registered_count`, `in_progress_count`, `completed_this_month`
+- `appendAuditEvent(payload)` — append-only audit insert for auth/report/workflow security events
+- `createReportRevision(payload)` — creates a backend-only 4-section report snapshot
+- `findLatestReportRevisionByExamId(examId, laboratoryId)` — used to deduplicate unchanged save/validation snapshots
+
+## Security Model (post-P3)
+
+- **Authenticated business scope:** all business routes run behind the server-side cookie-backed session and derive `userId`, `laboratoryId`, and `sessionId` from the server session only.
+- **Request-scoped DB policy context:** protected requests set PostgreSQL transaction-local settings (`app.current_laboratory_id`, `app.current_user_id`, `app.current_session_id`, `app.current_request_id`) before lab-scoped queries/transactions.
+- **PostgreSQL tenant defense-in-depth:** forced RLS is enabled on `patients`, `exams`, `reports`, `exam_sequences`, `report_templates`, `audit_events`, and `report_revisions`.
+- **Audit / medico-legal minimum:** auth success/failure, logout, explicit report save, exam validation, and exam reopen now write append-only rows to `audit_events`. Explicit report saves and validations create deduplicated backend-only snapshots in `report_revisions` when the narrative changed.
+- **Dependency / build security checks:** backend and frontend both expose `security:audit:*` npm scripts. The frontend also exposes `security:csp:check` and `security:csp:build-check` for CSP compatibility scanning of the built bundle.
+- **CSP status:** the serving-layer CSP header is still external to this repo. The repo now includes a frontend compatibility guard, but enforced `script-src 'self'` is still blocked by the current `html2pdf.js` PDF-export dependency path.
 
 ---
 
@@ -200,7 +214,7 @@ ReportTemplate                    standalone — not linked to patient or exam
 ## Key Frontend Files
 
 ### Services
-- `apiClient.ts` — injects `Authorization` + `X-Laboratory-Id` on authenticated requests
+- `apiClient.ts` — same-origin authenticated HTTP client (`credentials: 'include'`)
 - `examService.ts` — `getStats()`, `list(filters, { signal? })`, `getById`, `create`, `update`, `updateStatus`, `getReportByExamId`, `saveReportByExamId`, `getWorkspaceByExamId`
   - `ExamListFilters = { status?, exam_type?, search?, date_from?, date_to?, keyword? }` — all optional, passed as query params
   - `getStats()` → `GET /api/exams/stats` → `ExamStats`
@@ -244,7 +258,7 @@ ReportTemplate                    standalone — not linked to patient or exam
 ## Completed Features (end-to-end)
 
 ### Core workflow
-- Login → authenticated session → Accueil work queue
+- Login → cookie-backed authenticated session → Accueil work queue
 - Create patient (with duplicate detection) → patient detail with empty exam list
 - Update patient info from patient detail (inline edit form)
 - Create prélèvement → exam workspace (redirects on save)
@@ -309,6 +323,19 @@ ReportTemplate                    standalone — not linked to patient or exam
   - Reopening is the only allowed path before any post-validation correction
   - Report becomes editable again, date will be re-set on next validation
 
+### Audit trail / report revisions
+- `audit_events` is append-only and backend-only. It currently records:
+  - `auth_login_failed`
+  - `auth_login_succeeded`
+  - `auth_logout_succeeded`
+  - `report_saved`
+  - `exam_validated`
+  - `exam_reopened`
+- `report_revisions` stores backend-only 4-section snapshots on:
+  - explicit report save when the current narrative differs from the latest stored snapshot
+  - exam validation when the current report differs from the latest stored snapshot
+- There is currently **no doctor-facing history UI**. These tables are present for traceability and recovery groundwork, not as a user-facing feature.
+
 ### PDF export / Aperçu PDF
 - `ExamPrintPage` at `/exams/:id/print` — opens in new tab from exam workspace, no sidebar
 - Client-side PDF generation via `html2pdf.js` (lazy-loaded)
@@ -335,22 +362,29 @@ ReportTemplate                    standalone — not linked to patient or exam
 ### Stabilization / regression safety
 - **Backend contract tests:** `anapath-back/tests/api.contract.test.js` runs with `node --test` against the configured PostgreSQL database using a temporary dedicated laboratory and automatic cleanup.
   - Covered flows: patient creation, exam creation, report load/save, validation/reopen, minimal template CRUD, archive search, archive preview
+- **Backend security regression tests:**
+  - `anapath-back/tests/security.auth.test.js` covers authentication gates, tenant isolation, session invalidation, and login throttling
+  - `anapath-back/tests/security.validation.test.js` covers validation hardening, request-id/log redaction checks, DB policy context, forced RLS catalog state, and cross-lab DB constraints
+  - `anapath-back/tests/security.audit.test.js` covers audit ledger writes and report revision snapshot behavior
 - **Frontend smoke tests:** `anapath-front/src/test/ExamPrintPage.test.tsx` runs with Vitest + jsdom and verifies `ExamPrintPage` draft vs validated rendering.
+- **Frontend auth/session smoke tests:** `anapath-front/src/test/AuthSession.test.tsx` verifies protected-route session restoration and logout behavior from the client app shell.
 - **Archive profiling artifacts:** `archive_profile_fixture.sql`, `archive_profile_explain.sql`, and `archive_profile_results.md` document a realistic archive performance pass on `200` completed cases in a technical profiling lab (`laboratory_id = 9001` when the fixture is loaded manually).
 
 ---
 
 ## Known Limitations / Intentionally Deferred
 
-- **Auth is placeholder:** plaintext password comparison, mock token string, no JWT middleware, no route-level authorization
+- **Auth is local/staging oriented:** bootstrap admin creation is env-driven (`npm run bootstrap:admin`). There is still no self-service password reset UI or multi-user onboarding flow.
 - **No RBAC** — single doctor/admin workflow only
 - **No pagination** — all lists load in full; deferred until data volume requires it
 - **PDF is client-side only** — `html2pdf.js` in the browser. No server-side rendering, no cryptographic/official signature on the document.
 - **Lab settings are localStorage-only** — not synced across devices. If localStorage is cleared, settings reset to defaults (which are the real lab defaults).
-- **No report audit trail** — reopen works but leaves no trace beyond `updated_at` timestamps. No version history, no recovery of overwritten text.
+- **Audit trail is backend-only and intentionally minimal** — there is no doctor-facing history viewer, no diff UI, and no restore workflow yet.
 - **No CIN field on patients** — requires schema migration; deferred
 - **No URL-based filter persistence** — Accueil filters reset on page reload; deferred
-- **Multi-tenancy** — request scoping by lab is now wired, but auth is still placeholder and there is no real authorization / session enforcement beyond the current lab header flow
+- **Multi-tenancy** — request scoping now comes from the authenticated session and DB RLS, but this remains a single-doctor/admin workflow with no RBAC or broader tenant administration model
+- **Rate limiting is process-local / in-memory** — acceptable for the current local/staging scope, but not yet distributed/shared across processes
+- **CSP is not yet enforced at the real serving layer** — the repo documents the Report-Only rollout path and includes a compatibility guard, but the current PDF export dependency path still fails strict CSP compatibility checks
 - **Dashboard stats not filter-responsive** — the 3 stat cards always show global lab totals regardless of active status tab, search, date range, or exam type. Intentional by design.
 - **Dashboard stats not auto-refreshed** — fetched once on page mount. If an exam is completed in another tab, stats are stale until page reload.
 
@@ -397,10 +431,20 @@ ReportTemplate                    standalone — not linked to patient or exam
 
 ```bash
 # Backend
-cd anapath-back && npm run dev     # starts on port 5000
+cd anapath-back && npm run bootstrap:admin  # creates/rotates the local admin from BOOTSTRAP_ADMIN_* env vars
+cd anapath-back && npm run dev              # starts on port 5000
+cd anapath-back && npm run security:audit:prod
+cd anapath-back && npm run security:audit:full
+cd anapath-back && npm run db:role:check
+cd anapath-back && npm run db:rls:check
 
 # Frontend
-cd anapath-front && npm run dev    # starts on port 5173
+cd anapath-front && npm run dev              # starts on port 5173
+cd anapath-front && npm run build
+cd anapath-front && npm run security:csp:check
+cd anapath-front && npm run security:csp:build-check
+cd anapath-front && npm run security:audit:prod
+cd anapath-front && npm run security:audit:full
 
 # Backend contract tests
 cd anapath-back && npm test
@@ -419,4 +463,4 @@ psql -d anapath -f anapath-back/src/db/archive_profile_fixture.sql
 psql -d anapath -f anapath-back/src/db/archive_profile_explain.sql
 ```
 
-**Default login:** `admin@anapath.local` / `admin123`
+**Local/staging login:** run `npm run bootstrap:admin` first, then log in with `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`
