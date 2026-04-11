@@ -21,7 +21,16 @@ import { examService } from '../services/examService'
 import type { UpdateExamInput } from '../services/examService'
 import { patientService } from '../services/patientService'
 import { reportTemplateService } from '../services/reportTemplateService'
-import type { CaseArchiveResult, CaseArchiveSection, Exam, ExamWithReportSummary, ReportInput, ReportTemplate } from '../types/domain'
+import type {
+  CaseArchiveResult,
+  CaseArchiveSection,
+  Exam,
+  ExamWithReportSummary,
+  ReportInput,
+  ReportRevisionDetail,
+  ReportRevisionSummary,
+  ReportTemplate,
+} from '../types/domain'
 import { mapExamStatusToBackend } from '../utils/domainMappings'
 import { formatDate, truncate } from '../utils/formatting'
 
@@ -41,6 +50,16 @@ export function ExamDetailPage() {
   const [reportError, setReportError] = useState('')
   const [reportInfo, setReportInfo] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
+  const [revisions, setRevisions] = useState<ReportRevisionSummary[]>([])
+  const [selectedRevisionId, setSelectedRevisionId] = useState<number | null>(null)
+  const [selectedRevision, setSelectedRevision] = useState<ReportRevisionDetail | null>(null)
+  const [historyError, setHistoryError] = useState('')
+  const [revisionDetailError, setRevisionDetailError] = useState('')
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false)
+  const [isRevisionLoading, setIsRevisionLoading] = useState(false)
+  const [isRestoringRevision, setIsRestoringRevision] = useState(false)
+  const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false)
 
   const [patientName, setPatientName] = useState('')
   const [antecedents, setAntecedents] = useState<ExamWithReportSummary[]>([])
@@ -72,6 +91,44 @@ export function ExamDetailPage() {
   const [saveAsTemplateInfo, setSaveAsTemplateInfo] = useState('')
   const [isSavingTemplate, setIsSavingTemplate] = useState(false)
 
+  const loadReportHistory = async (
+    options: { keepCurrentSelection?: boolean; selectLatest?: boolean } = {},
+  ) => {
+    setIsHistoryLoading(true)
+    setHistoryError('')
+    try {
+      const data = await examService.listReportRevisionsByExamId(id)
+      setRevisions(data)
+
+      if (data.length === 0) {
+        setSelectedRevisionId(null)
+        setSelectedRevision(null)
+        return
+      }
+
+      if (options.selectLatest) {
+        setSelectedRevisionId(data[0].id)
+        return
+      }
+
+      if (
+        options.keepCurrentSelection
+        && selectedRevisionId !== null
+        && data.some((revision) => revision.id === selectedRevisionId)
+      ) {
+        return
+      }
+
+      setSelectedRevisionId(data[0].id)
+    } catch (err) {
+      setHistoryError(
+        err instanceof Error ? err.message : "Impossible de charger l'historique."
+      )
+    } finally {
+      setIsHistoryLoading(false)
+    }
+  }
+
   // Load exam + report --------------------------------------------------------
   useEffect(() => {
     const load = async () => {
@@ -96,6 +153,16 @@ export function ExamDetailPage() {
       }
     }
     void load()
+  }, [id])
+
+  useEffect(() => {
+    setIsHistoryOpen(false)
+    setRevisions([])
+    setSelectedRevisionId(null)
+    setSelectedRevision(null)
+    setHistoryError('')
+    setRevisionDetailError('')
+    setIsRestoreConfirmOpen(false)
   }, [id])
 
   // Load templates ------------------------------------------------------------
@@ -296,6 +363,62 @@ export function ExamDetailPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!isHistoryOpen) {
+      setIsRestoreConfirmOpen(false)
+      return
+    }
+
+    void loadReportHistory({
+      keepCurrentSelection: true,
+      selectLatest: selectedRevisionId === null,
+    })
+  }, [id, isHistoryOpen])
+
+  useEffect(() => {
+    if (!isHistoryOpen || selectedRevisionId === null) {
+      setSelectedRevision(null)
+      setRevisionDetailError('')
+      setIsRevisionLoading(false)
+      return
+    }
+
+    let isMounted = true
+
+    const loadRevisionDetail = async () => {
+      setIsRevisionLoading(true)
+      setRevisionDetailError('')
+      try {
+        const detail = await examService.getReportRevisionById(id, selectedRevisionId)
+        if (!isMounted) return
+
+        if (!detail) {
+          setSelectedRevision(null)
+          setRevisionDetailError('Version introuvable.')
+          return
+        }
+
+        setSelectedRevision(detail)
+      } catch (err) {
+        if (!isMounted) return
+        setSelectedRevision(null)
+        setRevisionDetailError(
+          err instanceof Error ? err.message : "Impossible de charger la version."
+        )
+      } finally {
+        if (isMounted) {
+          setIsRevisionLoading(false)
+        }
+      }
+    }
+
+    void loadRevisionDetail()
+
+    return () => {
+      isMounted = false
+    }
+  }, [id, isHistoryOpen, selectedRevisionId])
+
   // Edit exam ----------------------------------------------------------------
   const onEditExam = () => {
     if (!exam || mapExamStatusToBackend(exam.status) === 'completed') return
@@ -347,6 +470,9 @@ export function ExamDetailPage() {
       if (updated) {
         setExam(updated)
         setExamForm(toExamEditForm(updated))
+        if (isHistoryOpen) {
+          void loadReportHistory({ keepCurrentSelection: true })
+        }
       }
     } catch (err) {
       setStatusError(
@@ -368,6 +494,9 @@ export function ExamDetailPage() {
       if (updated) {
         setExam(updated)
         setExamForm(toExamEditForm(updated))
+        if (isHistoryOpen) {
+          void loadReportHistory({ keepCurrentSelection: true })
+        }
       }
     } catch (err) {
       setStatusError(
@@ -392,12 +521,50 @@ export function ExamDetailPage() {
       }
       setReport(updated)
       setReportInfo('Compte rendu enregistré.')
+      if (isHistoryOpen) {
+        void loadReportHistory({ selectLatest: true })
+      }
     } catch (err) {
       setReportError(
         err instanceof Error ? err.message : "Impossible d'enregistrer le compte rendu."
       )
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const onToggleHistory = () => {
+    setHistoryError('')
+    setRevisionDetailError('')
+    setIsRestoreConfirmOpen(false)
+    setIsHistoryOpen((current) => !current)
+  }
+
+  const onRestoreRevision = async () => {
+    if (selectedRevisionId === null) return
+
+    setReportError('')
+    setReportInfo('')
+    setIsRestoringRevision(true)
+    try {
+      const restored = await examService.restoreReportRevisionById(id, selectedRevisionId)
+      if (!restored) {
+        setReportError('Version introuvable pour cette restauration.')
+        return
+      }
+
+      setReport(restored)
+      setReportInfo('Version restaurée.')
+      setIsRestoreConfirmOpen(false)
+      if (isHistoryOpen) {
+        void loadReportHistory({ selectLatest: true })
+      }
+    } catch (err) {
+      setReportError(
+        err instanceof Error ? err.message : 'Impossible de restaurer cette version.'
+      )
+    } finally {
+      setIsRestoringRevision(false)
     }
   }
 
@@ -449,6 +616,32 @@ export function ExamDetailPage() {
           { label: exam.exam_number },
         ]}
       />
+
+      <section className="panel exam-case-strip">
+        <div className="exam-case-strip-main">
+          <span className="page-header-kicker">Dossier actif</span>
+          <h2>{patientName || 'Patient en cours de traitement'}</h2>
+          <p>
+            {exam.sample_nature || 'Nature non renseignée'}
+            {exam.clinic_name ? ` • ${exam.clinic_name}` : ''}
+          </p>
+        </div>
+
+        <div className="exam-case-strip-meta">
+          <div className="exam-case-strip-card">
+            <span>Statut</span>
+            <StatusBadge status={exam.status} />
+          </div>
+          <div className="exam-case-strip-card">
+            <span>Réception</span>
+            <strong>{formatDate(exam.registered_date)}</strong>
+          </div>
+          <div className="exam-case-strip-card">
+            <span>Type</span>
+            <strong>{exam.exam_type === 'histology' ? 'Histologie' : 'Cytologie'}</strong>
+          </div>
+        </div>
+      </section>
 
       <ExamSummaryPanel
         exam={exam}
@@ -503,31 +696,45 @@ export function ExamDetailPage() {
 
       {/* ── Espace de travail du compte rendu ───────────────────────────── */}
       <div className="exam-detail-workspace-grid">
-        <ExamReportPanel
-          report={report}
-          setReport={setReport}
-          templates={templates}
-          pendingTemplate={pendingTemplate}
-          showConfirmApply={showConfirmApply}
-          saveAsTemplateOpen={saveAsTemplateOpen}
-          saveAsTemplateName={saveAsTemplateName}
+      <ExamReportPanel
+        report={report}
+        setReport={setReport}
+        revisions={revisions}
+        selectedRevisionId={selectedRevisionId}
+        selectedRevision={selectedRevision}
+        templates={templates}
+        pendingTemplate={pendingTemplate}
+        showConfirmApply={showConfirmApply}
+        saveAsTemplateOpen={saveAsTemplateOpen}
+        saveAsTemplateName={saveAsTemplateName}
           saveAsTemplateError={saveAsTemplateError}
           saveAsTemplateInfo={saveAsTemplateInfo}
           reportError={reportError}
-          reportInfo={reportInfo}
-          isReportLoading={isReportLoading}
-          isSubmitting={isSubmitting}
-          isReportLocked={isReportLocked}
-          isStatusUpdating={isStatusUpdating}
-          isReopenConfirmOpen={isReopenConfirmOpen}
-          isSavingTemplate={isSavingTemplate}
-          onSubmitReport={onSubmitReport}
-          onConfirmReopen={onConfirmReopen}
-          onApplyTemplate={handleApplyTemplate}
-          onApplyPendingTemplate={applyTemplate}
-          onToggleReopenConfirm={setIsReopenConfirmOpen}
-          onToggleSaveAsTemplate={setSaveAsTemplateOpen}
-          onSaveAsTemplateNameChange={setSaveAsTemplateName}
+        reportInfo={reportInfo}
+        isReportLoading={isReportLoading}
+        isSubmitting={isSubmitting}
+        isReportLocked={isReportLocked}
+        isHistoryOpen={isHistoryOpen}
+        isHistoryLoading={isHistoryLoading}
+        isRevisionLoading={isRevisionLoading}
+        isRestoringRevision={isRestoringRevision}
+        isStatusUpdating={isStatusUpdating}
+        isReopenConfirmOpen={isReopenConfirmOpen}
+        isRestoreConfirmOpen={isRestoreConfirmOpen}
+        isSavingTemplate={isSavingTemplate}
+        historyError={historyError}
+        revisionDetailError={revisionDetailError}
+        onSubmitReport={onSubmitReport}
+        onConfirmReopen={onConfirmReopen}
+        onSelectRevision={setSelectedRevisionId}
+        onToggleHistory={onToggleHistory}
+        onToggleRestoreConfirm={setIsRestoreConfirmOpen}
+        onRestoreRevision={onRestoreRevision}
+        onApplyTemplate={handleApplyTemplate}
+        onApplyPendingTemplate={applyTemplate}
+        onToggleReopenConfirm={setIsReopenConfirmOpen}
+        onToggleSaveAsTemplate={setSaveAsTemplateOpen}
+        onSaveAsTemplateNameChange={setSaveAsTemplateName}
           onSaveAsTemplate={handleSaveAsTemplate}
           onSaveAsTemplateErrorReset={() => setSaveAsTemplateError('')}
           onSaveAsTemplateInfoReset={() => setSaveAsTemplateInfo('')}

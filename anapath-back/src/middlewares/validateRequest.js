@@ -621,6 +621,41 @@ export const validateReportUpdateRequest = validateRequest((req) => ({
   body: validateReportBody(requireBodyObject(req)),
 }));
 
+export const validateReportRevisionListRequest = validateRequest((req) => ({
+  params: {
+    examId: positiveIntegerStringField({
+      label: 'identifiant prélèvement',
+      location: 'params',
+    })(requireParamsObject(req).examId),
+  },
+}));
+
+export const validateReportRevisionDetailRequest = validateRequest((req) => ({
+  params: {
+    examId: positiveIntegerStringField({
+      label: 'identifiant prélèvement',
+      location: 'params',
+    })(requireParamsObject(req).examId),
+    revisionId: positiveIntegerStringField({
+      label: 'identifiant de version',
+      location: 'params',
+    })(requireParamsObject(req).revisionId),
+  },
+}));
+
+export const validateReportRevisionRestoreRequest = validateRequest((req) => ({
+  params: {
+    examId: positiveIntegerStringField({
+      label: 'identifiant prélèvement',
+      location: 'params',
+    })(requireParamsObject(req).examId),
+    revisionId: positiveIntegerStringField({
+      label: 'identifiant de version',
+      location: 'params',
+    })(requireParamsObject(req).revisionId),
+  },
+}));
+
 export const validateTemplateReadRequest = validateRequest((req) => ({
   query: {},
 }));

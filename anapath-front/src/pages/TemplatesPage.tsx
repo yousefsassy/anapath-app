@@ -138,6 +138,16 @@ export function TemplatesPage() {
       />
 
       <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Bibliothèque de modèles</h2>
+            <p>Référentiel de textes réutilisables pour accélérer la rédaction.</p>
+          </div>
+          <span className="dashboard-recent-count">
+            {templates.length} modèle{templates.length > 1 ? 's' : ''}
+          </span>
+        </div>
+
         {isLoading && <p className="report-loading">Chargement des modèles…</p>}
         {error && <p className="error-message">{error}</p>}
 

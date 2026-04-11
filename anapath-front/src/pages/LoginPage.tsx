@@ -54,8 +54,9 @@ export function LoginPage() {
   return (
     <section className="auth-page">
       <div className="auth-card">
+        <span className="page-header-kicker">Plateforme laboratoire</span>
         <h1>Anapath</h1>
-        <p>Connectez-vous avec votre adresse e-mail et votre mot de passe.</p>
+        <p>Connectez-vous pour accéder au suivi des patients, prélèvements et comptes rendus.</p>
 
         <form onSubmit={onSubmit} className="auth-form">
           <div className="form-field">
@@ -92,6 +93,10 @@ export function LoginPage() {
             {isSubmitting ? 'Connexion…' : 'Se connecter'}
           </button>
         </form>
+
+        <div className="auth-footer-note">
+          Interface clinique destinée au travail quotidien du laboratoire.
+        </div>
       </div>
     </section>
   )

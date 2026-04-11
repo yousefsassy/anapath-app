@@ -123,13 +123,41 @@ CREATE TABLE IF NOT EXISTS report_revisions (
   actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   actor_session_id INTEGER,
   request_id VARCHAR(100),
-  snapshot_reason VARCHAR(50) NOT NULL CHECK (snapshot_reason IN ('save', 'validation')),
+  snapshot_reason VARCHAR(50) NOT NULL CHECK (snapshot_reason IN ('save', 'validation', 'restore')),
   clinical_info TEXT NOT NULL DEFAULT '',
   macroscopy TEXT NOT NULL DEFAULT '',
   microscopy TEXT NOT NULL DEFAULT '',
   conclusion TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+DO $$
+DECLARE
+  snapshot_reason_constraint TEXT;
+BEGIN
+  SELECT con.conname
+  INTO snapshot_reason_constraint
+  FROM pg_constraint con
+  INNER JOIN pg_class rel ON rel.oid = con.conrelid
+  WHERE rel.relname = 'report_revisions'
+    AND con.contype = 'c'
+    AND pg_get_constraintdef(con.oid) ILIKE '%snapshot_reason%'
+  LIMIT 1;
+
+  IF snapshot_reason_constraint IS NOT NULL THEN
+    EXECUTE format(
+      'ALTER TABLE report_revisions DROP CONSTRAINT %I',
+      snapshot_reason_constraint
+    );
+  END IF;
+
+  ALTER TABLE report_revisions
+    ADD CONSTRAINT report_revisions_snapshot_reason_check
+    CHECK (snapshot_reason IN ('save', 'validation', 'restore'));
+EXCEPTION
+  WHEN duplicate_object THEN
+    NULL;
+END $$;
 
 CREATE OR REPLACE FUNCTION immutable_text_array_to_string(input_array text[], separator text)
 RETURNS text

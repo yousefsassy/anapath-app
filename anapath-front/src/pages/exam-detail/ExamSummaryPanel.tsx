@@ -50,54 +50,59 @@ export function ExamSummaryPanel({
         <div className="panel-header exam-detail-summary-header">
           <div>
             <h2>Informations du prélèvement</h2>
+            <p>Métadonnées du dossier, statut de workflow et actions de validation.</p>
           </div>
-          <div className="form-actions exam-detail-status-actions">
-            <StatusBadge status={exam.status} />
+          <div className="exam-detail-summary-actions">
+            <div className="form-actions exam-detail-status-actions">
+              <StatusBadge status={exam.status} />
 
-            <Link
-              to={`/exams/${examId}/print`}
-              className="button tertiary"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Aperçu PDF
-            </Link>
-
-            {!isEditingExam && statusAction ? (
-              <button
-                type="button"
-                className={`button exam-status-btn exam-status-btn--${statusAction.next}`}
-                onClick={() => void onUpdateStatus(statusAction.next)}
-                disabled={isStatusUpdating}
-              >
-                {isStatusUpdating ? '…' : statusAction.label}
-              </button>
-            ) : null}
-
-            {!isEditingExam && currentStatus !== 'completed' ? (
-              <button
-                type="button"
+              <Link
+                to={`/exams/${examId}/print`}
                 className="button tertiary"
-                onClick={onEditExam}
-                disabled={isExamSubmitting}
+                target="_blank"
+                rel="noopener noreferrer"
               >
-                Modifier
-              </button>
-            ) : isEditingExam ? (
-              <>
+                Aperçu PDF
+              </Link>
+            </div>
+
+            <div className="form-actions exam-detail-status-actions">
+              {!isEditingExam && statusAction ? (
+                <button
+                  type="button"
+                  className={`button exam-status-btn exam-status-btn--${statusAction.next}`}
+                  onClick={() => void onUpdateStatus(statusAction.next)}
+                  disabled={isStatusUpdating}
+                >
+                  {isStatusUpdating ? '…' : statusAction.label}
+                </button>
+              ) : null}
+
+              {!isEditingExam && currentStatus !== 'completed' ? (
                 <button
                   type="button"
                   className="button tertiary"
-                  onClick={onCancelEditExam}
+                  onClick={onEditExam}
                   disabled={isExamSubmitting}
                 >
-                  Annuler
+                  Modifier
                 </button>
-                <button type="submit" className="button" disabled={isExamSubmitting}>
-                  {isExamSubmitting ? 'Enregistrement…' : 'Enregistrer'}
-                </button>
-              </>
-            ) : null}
+              ) : isEditingExam ? (
+                <>
+                  <button
+                    type="button"
+                    className="button tertiary"
+                    onClick={onCancelEditExam}
+                    disabled={isExamSubmitting}
+                  >
+                    Annuler
+                  </button>
+                  <button type="submit" className="button" disabled={isExamSubmitting}>
+                    {isExamSubmitting ? 'Enregistrement…' : 'Enregistrer'}
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
 

@@ -95,6 +95,7 @@ export function DashboardPage() {
   }, [activeFilter, examTypeFilter, debouncedSearch, dateFrom, dateTo, debouncedKeyword])
 
   const hasActiveFilters = searchTerm !== '' || examTypeFilter !== 'all' || dateFrom !== '' || dateTo !== '' || keywordSearch !== ''
+  const activeQueueCount = stats ? stats.registered_count + stats.in_progress_count : null
 
   const clearFilters = () => {
     setSearchTerm('')
@@ -116,6 +117,22 @@ export function DashboardPage() {
         }
       />
 
+      <section className="panel dashboard-overview">
+        <div className="dashboard-overview-content">
+          <span className="page-header-kicker">Vue opérationnelle</span>
+          <h2>Suivi quotidien du laboratoire</h2>
+          <p>
+            Visualisez immédiatement les prélèvements entrants, ceux en cours d'analyse
+            et les dossiers déjà validés sur la période en cours.
+          </p>
+        </div>
+
+        <div className="dashboard-overview-metric">
+          <span>Dossiers actifs</span>
+          <strong>{activeQueueCount ?? '—'}</strong>
+        </div>
+      </section>
+
       <div className="stats-grid">
         <div className="dashboard-stat-card">
           <div className="dashboard-stat-head">Enregistrés</div>
@@ -135,6 +152,16 @@ export function DashboardPage() {
       </div>
 
       <section className="panel">
+        <div className="panel-header dashboard-recent-header">
+          <div>
+            <h2>File de travail</h2>
+            <p>Prélèvements triés par priorité et date de création.</p>
+          </div>
+          <span className="dashboard-recent-count">
+            {loading ? 'Chargement…' : `${exams.length} dossier${exams.length > 1 ? 's' : ''}`}
+          </span>
+        </div>
+
         <div className="accueil-filter-tabs">
           {STATUS_TABS.map((tab) => (
             <button
@@ -264,16 +291,31 @@ export function DashboardPage() {
                     onClick={() => navigate(`/exams/${exam.id}`)}
                   >
                     <td className="accueil-ref">
-                      {exam.urgent && <span className="badge--urgent">Urgent</span>}{' '}
-                      {exam.exam_number}
+                      <div className="dashboard-ref-stack">
+                        {exam.urgent ? <span className="badge--urgent">Urgent</span> : null}
+                        <span>{exam.exam_number}</span>
+                      </div>
                     </td>
                     <td>
-                      {exam.patient_last_name && exam.patient_first_name
-                        ? `${exam.patient_last_name} ${exam.patient_first_name}`
-                        : '—'}
+                      <div className="dashboard-patient-cell">
+                        <strong>
+                          {exam.patient_last_name && exam.patient_first_name
+                            ? `${exam.patient_last_name} ${exam.patient_first_name}`
+                            : '—'}
+                        </strong>
+                        <span>
+                          {exam.exam_type === 'histology'
+                            ? 'Histologie'
+                            : exam.exam_type === 'cytology'
+                              ? 'Cytologie'
+                              : '—'}
+                        </span>
+                      </div>
                     </td>
-                    <td>{exam.sample_nature || '—'}</td>
-                    <td>{formatDate(exam.registered_date)}</td>
+                    <td className="dashboard-nature-cell">{exam.sample_nature || '—'}</td>
+                    <td>
+                      <span className="table-date">{formatDate(exam.registered_date)}</span>
+                    </td>
                     <td>
                       <StatusBadge status={exam.status} />
                     </td>

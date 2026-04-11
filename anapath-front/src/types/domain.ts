@@ -35,6 +35,21 @@ export interface Report {
   conclusion: string
 }
 
+export type ReportRevisionReason = 'save' | 'validation' | 'restore'
+
+export interface ReportRevisionSummary {
+  id: number
+  created_at: string
+  snapshot_reason: ReportRevisionReason
+  actor_user_id: number | null
+  actor_full_name: string | null
+}
+
+export interface ReportRevisionDetail extends ReportRevisionSummary, Report {
+  exam_id: number
+  report_id: number
+}
+
 export interface Exam {
   id: number | string
   laboratory_id: number

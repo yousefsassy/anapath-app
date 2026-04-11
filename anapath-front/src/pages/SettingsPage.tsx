@@ -43,6 +43,17 @@ export function SettingsPage() {
         ]}
       />
 
+      <section className="panel settings-hero-panel">
+        <div className="settings-hero-copy">
+          <span className="page-header-kicker">Identité documentaire</span>
+          <h2>Configuration d'impression et de signature</h2>
+          <p>
+            Ces informations alimentent l'entête de secours et la signature visibles sur
+            les aperçus PDF lorsque l'image institutionnelle n'est pas utilisée.
+          </p>
+        </div>
+      </section>
+
       <form onSubmit={onSubmit}>
         {/* ── Médecin ─────────────────────────────────────────────────────── */}
         <section className="panel">

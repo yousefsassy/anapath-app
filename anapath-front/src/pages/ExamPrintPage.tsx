@@ -154,6 +154,10 @@ export function ExamPrintPage() {
   return (
     <main className="print-page-root">
       <div className="print-toolbar no-print">
+        <div className="print-toolbar-summary">
+          <span className="page-header-kicker">Aperçu document</span>
+          <strong>{exam.exam_number}</strong>
+        </div>
         <Link to={`/exams/${id}`} className="button tertiary">
           Retour
         </Link>

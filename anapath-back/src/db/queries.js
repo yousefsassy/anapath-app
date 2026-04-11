@@ -491,6 +491,53 @@ export async function createReportRevision(payload, db = null) {
   return result.rows[0] || null;
 }
 
+export async function findReportRevisionsByExamId(examId, laboratoryId, db = null) {
+  const result = await executeDb(
+    db,
+    `SELECT
+       rr.id,
+       rr.created_at,
+       rr.snapshot_reason,
+       rr.actor_user_id,
+       u.full_name AS actor_full_name
+     FROM report_revisions rr
+     LEFT JOIN users u ON u.id = rr.actor_user_id
+     WHERE rr.exam_id = $1
+       AND rr.laboratory_id = $2
+     ORDER BY rr.created_at DESC, rr.id DESC`,
+    [examId, laboratoryId]
+  );
+
+  return result.rows;
+}
+
+export async function findReportRevisionById(examId, revisionId, laboratoryId, db = null) {
+  const result = await executeDb(
+    db,
+    `SELECT
+       rr.id,
+       rr.exam_id,
+       rr.report_id,
+       rr.created_at,
+       rr.snapshot_reason,
+       rr.actor_user_id,
+       u.full_name AS actor_full_name,
+       rr.clinical_info,
+       rr.macroscopy,
+       rr.microscopy,
+       rr.conclusion
+     FROM report_revisions rr
+     LEFT JOIN users u ON u.id = rr.actor_user_id
+     WHERE rr.exam_id = $1
+       AND rr.id = $2
+       AND rr.laboratory_id = $3
+     LIMIT 1`,
+    [examId, revisionId, laboratoryId]
+  );
+
+  return result.rows[0] || null;
+}
+
 export async function findAllTemplatesByLabId(labId) {
   const result = await query(
     'SELECT * FROM report_templates WHERE laboratory_id = $1 ORDER BY name ASC',

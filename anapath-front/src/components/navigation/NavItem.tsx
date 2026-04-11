@@ -5,11 +5,16 @@ interface NavItemProps {
   to: string
   label: string
   icon: LucideIcon
+  onNavigate?: () => void
 }
 
-export function NavItem({ to, label, icon: Icon }: NavItemProps) {
+export function NavItem({ to, label, icon: Icon, onNavigate }: NavItemProps) {
   return (
-    <NavLink to={to} className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>
+    <NavLink
+      to={to}
+      onClick={onNavigate}
+      className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+    >
       <Icon size={16} strokeWidth={2} aria-hidden="true" />
       <span>{label}</span>
     </NavLink>

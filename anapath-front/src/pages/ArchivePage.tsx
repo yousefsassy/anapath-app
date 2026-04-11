@@ -118,8 +118,20 @@ export function ArchivePage() {
               les mots-clés diagnostiques et le texte du compte rendu.
             </p>
           </div>
-          <div className="archive-panel-note">
-            Sans terme de recherche, les cas validés les plus récents sont affichés.
+          <div className="archive-panel-side">
+            <div className="archive-panel-note">
+              Sans terme de recherche, les cas validés les plus récents sont affichés.
+            </div>
+            <div className="archive-results-summary archive-results-summary--panel">
+              {isLoading ? (
+                <span>Recherche en cours…</span>
+              ) : (
+                <>
+                  <strong>{results.length}</strong>
+                  <span>cas affichés</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -197,19 +209,6 @@ export function ArchivePage() {
               </button>
             )}
           </div>
-        </div>
-
-        <div className="archive-results-summary">
-          {isLoading ? (
-            <span>Recherche en cours…</span>
-          ) : (
-            <>
-              <strong>{results.length}</strong>
-              <span>
-                cas {results.length > 1 ? 'trouvés' : 'trouvé'}
-              </span>
-            </>
-          )}
         </div>
 
         <CaseArchiveResultList

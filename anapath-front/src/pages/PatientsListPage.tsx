@@ -115,6 +115,9 @@ export function PatientsListPage() {
                 : `${patients.length} patient${patients.length !== 1 ? 's' : ''}`}
             </p>
           </div>
+          <span className="patients-count">
+            {filteredPatients.length} visible{filteredPatients.length > 1 ? 's' : ''}
+          </span>
         </div>
 
         <div className="patients-toolbar">
@@ -214,7 +217,10 @@ export function PatientsListPage() {
                     return [
                       <tr key={pid} className="patient-main-row">
                         <td className="patient-name-cell">
-                          {patient.last_name} {patient.first_name}
+                          <div className="patient-name-stack">
+                            <strong>{patient.last_name} {patient.first_name}</strong>
+                            <span>Dossier patient</span>
+                          </div>
                         </td>
                         <td>{patient.age} ans</td>
                         <td>{displaySexFrench(patient.sex)}</td>

@@ -109,6 +109,7 @@ test('critical API contracts stay stable across the main workflows', async (t) =
   let patientId;
   let examId;
   let templateId;
+  let initialRevisionId;
 
   await t.test('session endpoint exposes the authenticated user context', async () => {
     const { status, payload } = await apiRequest('GET', '/auth/session');
@@ -191,6 +192,60 @@ test('critical API contracts stay stable across the main workflows', async (t) =
     const loadResponse = await apiRequest('GET', `/reports/${examId}`);
     assert.equal(loadResponse.status, 200);
     assert.equal(loadResponse.payload.data.microscopy, reportDraft.microscopy);
+  });
+
+  await t.test('report history list/detail/restore contracts', async () => {
+    const newerDraft = {
+      clinical_info: 'Nodule thyroidien suspect apres revision.',
+      macroscopy: 'Deux fragments beigeatres de petite taille.',
+      microscopy: 'Architecture papillaire avec atypies nucleaires persistantes.',
+      conclusion: 'Version plus recente avant restauration.',
+    };
+
+    const secondSaveResponse = await apiRequest('PUT', `/reports/${examId}`, {
+      body: newerDraft,
+    });
+    assert.equal(secondSaveResponse.status, 200);
+    assert.equal(secondSaveResponse.payload.success, true);
+
+    const listResponse = await apiRequest('GET', `/reports/${examId}/revisions`);
+    assert.equal(listResponse.status, 200);
+    assert.equal(listResponse.payload.success, true);
+    assert.equal(listResponse.payload.data.length, 2);
+    assert.equal(listResponse.payload.data[0].snapshot_reason, 'save');
+    assert.equal(listResponse.payload.data[0].actor_full_name, 'Contract Admin');
+    assert.ok(listResponse.payload.data[0].created_at);
+
+    initialRevisionId = listResponse.payload.data[1].id;
+
+    const detailResponse = await apiRequest(
+      'GET',
+      `/reports/${examId}/revisions/${initialRevisionId}`,
+    );
+    assert.equal(detailResponse.status, 200);
+    assert.equal(detailResponse.payload.success, true);
+    assert.equal(
+      detailResponse.payload.data.conclusion,
+      'Aspect suspect de carcinome papillaire thyroidien.',
+    );
+
+    const restoreResponse = await apiRequest(
+      'POST',
+      `/reports/${examId}/revisions/${initialRevisionId}/restore`,
+    );
+    assert.equal(restoreResponse.status, 200);
+    assert.equal(restoreResponse.payload.success, true);
+    assert.equal(
+      restoreResponse.payload.data.conclusion,
+      'Aspect suspect de carcinome papillaire thyroidien.',
+    );
+
+    const reloadedReportResponse = await apiRequest('GET', `/reports/${examId}`);
+    assert.equal(reloadedReportResponse.status, 200);
+    assert.equal(
+      reloadedReportResponse.payload.data.conclusion,
+      'Aspect suspect de carcinome papillaire thyroidien.',
+    );
   });
 
   await t.test('template CRUD stays functional', async () => {

@@ -14,6 +14,7 @@ let labBId = null;
 let patientAId = null;
 let examAId = null;
 let templateAId = null;
+let reportRevisionAId = null;
 let labACookie = '';
 let labBCookie = '';
 
@@ -133,11 +134,44 @@ before(async () => {
   );
   examAId = examResult.rows[0].id;
 
-  await query(
+  const reportResult = await query(
     `INSERT INTO reports (exam_id, clinical_info, macroscopy, microscopy, conclusion)
-     VALUES ($1, 'RC isolation unique', 'Macro isolation', 'Micro isolation', 'Conclusion isolation unique alpha123')`,
+     VALUES ($1, 'RC isolation unique', 'Macro isolation', 'Micro isolation', 'Conclusion isolation unique alpha123')
+     RETURNING id`,
     [examAId]
   );
+  const reportAId = reportResult.rows[0].id;
+
+  const reportRevisionResult = await query(
+    `INSERT INTO report_revisions (
+      laboratory_id,
+      exam_id,
+      report_id,
+      actor_user_id,
+      actor_session_id,
+      request_id,
+      snapshot_reason,
+      clinical_info,
+      macroscopy,
+      microscopy,
+      conclusion
+    ) VALUES (
+      $1,
+      $2,
+      $3,
+      NULL,
+      NULL,
+      NULL,
+      'validation',
+      'RC isolation unique',
+      'Macro isolation',
+      'Micro isolation',
+      'Conclusion isolation unique alpha123'
+    )
+    RETURNING id`,
+    [labAId, examAId, reportAId]
+  );
+  reportRevisionAId = reportRevisionResult.rows[0].id;
 
   const templateResult = await query(
     `INSERT INTO report_templates (laboratory_id, name, clinical_info, macroscopy, microscopy, conclusion)
@@ -223,6 +257,32 @@ test('security protections enforce authentication, tenant isolation, session inv
       ip: '172.16.0.25',
     });
     assert.equal(reportResponse.status, 404);
+
+    const revisionsResponse = await apiRequest('GET', `/reports/${examAId}/revisions`, {
+      cookie: labBCookie,
+      ip: '172.16.0.251',
+    });
+    assert.equal(revisionsResponse.status, 404);
+
+    const revisionDetailResponse = await apiRequest(
+      'GET',
+      `/reports/${examAId}/revisions/${reportRevisionAId}`,
+      {
+        cookie: labBCookie,
+        ip: '172.16.0.252',
+      },
+    );
+    assert.equal(revisionDetailResponse.status, 404);
+
+    const restoreResponse = await apiRequest(
+      'POST',
+      `/reports/${examAId}/revisions/${reportRevisionAId}/restore`,
+      {
+        cookie: labBCookie,
+        ip: '172.16.0.253',
+      },
+    );
+    assert.equal(restoreResponse.status, 404);
 
     const templateResponse = await apiRequest('PUT', `/report-templates/${templateAId}`, {
       cookie: labBCookie,

@@ -191,6 +191,7 @@ export function PatientDetailPage() {
           <div className="panel-header">
             <div>
               <h2>Informations patient</h2>
+              <p>Identité, informations de contact et contexte clinique général.</p>
             </div>
             {isEditingPatient ? (
               <div className="form-actions">
@@ -310,26 +311,33 @@ export function PatientDetailPage() {
               </div>
             </section>
           ) : (
-            <div className="detail-grid">
-              <p>
-                <strong>Âge :</strong> {patient.age} ans
-              </p>
-              <p>
-                <strong>Date de naissance :</strong> {formatDate(patient.birth_date)}
-              </p>
-              <p>
-                <strong>Sexe :</strong> {displaySexFrench(patient.sex)}
-              </p>
-              <p>
-                <strong>Téléphone :</strong> {patient.phone || '—'}
-              </p>
-              <p>
-                <strong>Enregistré le :</strong> {formatDate(patient.created_at)}
-              </p>
-              <p className="full-row">
-                <strong>Antécédents :</strong>{' '}
-                {patient.general_history || <em className="text-muted">Non renseigné</em>}
-              </p>
+            <div className="detail-grid detail-card-grid">
+              <article className="detail-card">
+                <span className="detail-card-label">Âge</span>
+                <strong>{patient.age} ans</strong>
+              </article>
+              <article className="detail-card">
+                <span className="detail-card-label">Date de naissance</span>
+                <strong>{formatDate(patient.birth_date)}</strong>
+              </article>
+              <article className="detail-card">
+                <span className="detail-card-label">Sexe</span>
+                <strong>{displaySexFrench(patient.sex)}</strong>
+              </article>
+              <article className="detail-card">
+                <span className="detail-card-label">Téléphone</span>
+                <strong>{patient.phone || '—'}</strong>
+              </article>
+              <article className="detail-card">
+                <span className="detail-card-label">Créé le</span>
+                <strong>{formatDate(patient.created_at)}</strong>
+              </article>
+              <article className="detail-card detail-card--full">
+                <span className="detail-card-label">Antécédents</span>
+                <div className="detail-card-body">
+                  {patient.general_history || <em className="text-muted">Non renseigné</em>}
+                </div>
+              </article>
             </div>
           )}
         </form>

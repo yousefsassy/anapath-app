@@ -380,6 +380,66 @@ test('P3 audit ledger and report revision snapshots are recorded on critical wor
     assert.equal(auditEvent.rows[0].metadata.result_issued_date_cleared, true);
   });
 
+  await t.test('restoring a prior report revision records audit metadata and a restore snapshot', async () => {
+    const firstRevision = await query(
+      `SELECT id
+       FROM report_revisions
+       WHERE exam_id = $1
+       ORDER BY id ASC
+       LIMIT 1`,
+      [savedExamId]
+    );
+    const revisionId = firstRevision.rows[0].id;
+
+    const changedDraftResponse = await apiRequest('PUT', `/reports/${savedExamId}`, {
+      body: {
+        clinical_info: 'Renseignement clinique modifie avant restauration.',
+        macroscopy: 'Macroscopie modifiee.',
+        microscopy: 'Microscopie modifiee.',
+        conclusion: 'Conclusion modifiee avant restauration.',
+      },
+    });
+    assert.equal(changedDraftResponse.status, 200);
+
+    const restoreResponse = await apiRequest(
+      'POST',
+      `/reports/${savedExamId}/revisions/${revisionId}/restore`,
+    );
+    assert.equal(restoreResponse.status, 200);
+    assert.equal(restoreResponse.payload.success, true);
+    assert.equal(restoreResponse.payload.data.conclusion, 'Conclusion apres sauvegarde.');
+
+    const revisions = await query(
+      `SELECT *
+       FROM report_revisions
+       WHERE exam_id = $1
+       ORDER BY id ASC`,
+      [savedExamId]
+    );
+
+    assert.equal(revisions.rows.length, 3);
+    assert.equal(revisions.rows[2].snapshot_reason, 'restore');
+    assert.equal(revisions.rows[2].conclusion, 'Conclusion apres sauvegarde.');
+    assert.equal(revisions.rows[2].actor_user_id, userId);
+
+    const auditEvent = await query(
+      `SELECT *
+       FROM audit_events
+       WHERE laboratory_id = $1
+         AND event_type = 'report_restored'
+         AND target_type = 'report'
+       ORDER BY id DESC
+       LIMIT 1`,
+      [labId]
+    );
+
+    assert.equal(auditEvent.rows.length, 1);
+    assert.equal(auditEvent.rows[0].metadata.exam_id, savedExamId);
+    assert.equal(auditEvent.rows[0].metadata.source_report_revision_id, revisionId);
+    assert.equal(auditEvent.rows[0].metadata.snapshot_reason, 'restore');
+    assert.equal(auditEvent.rows[0].metadata.restored_snapshot_reason, 'save');
+  });
+
   await t.test('logout revokes the session and records the logout audit event', async () => {
     const response = await apiRequest('POST', '/auth/logout');
 

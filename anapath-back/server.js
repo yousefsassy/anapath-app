@@ -7,6 +7,7 @@ dotenv.config();
 
 const DEFAULT_PORT = Number(process.env.PORT) || 5000;
 const MAX_PORT_ATTEMPTS = 10;
+const SERVER_HOST = process.env.HOST || '127.0.0.1';
 
 function isPortAvailable(port) {
   return new Promise((resolve) => {
@@ -24,7 +25,7 @@ function isPortAvailable(port) {
       tester.close(() => resolve(true));
     });
 
-    tester.listen(port);
+    tester.listen(port, SERVER_HOST);
   });
 }
 
@@ -56,10 +57,11 @@ async function startServer() {
     });
   }
 
-  app.listen(selectedPort, () => {
+  app.listen(selectedPort, SERVER_HOST, () => {
     logger.info('server_started', {
+      host: SERVER_HOST,
       port: selectedPort,
-      health_url: `http://localhost:${selectedPort}/api/health`,
+      health_url: `http://${SERVER_HOST}:${selectedPort}/api/health`,
     });
   });
 }

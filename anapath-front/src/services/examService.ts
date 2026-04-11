@@ -2,6 +2,8 @@ import type {
   Exam,
   ExamStats,
   ExamStatus,
+  ReportRevisionDetail,
+  ReportRevisionSummary,
   ExamWorkspaceData,
   NewExamInput,
   ReportInput,
@@ -212,6 +214,41 @@ export const examService = {
   saveReportByExamId: async (id: number | string, report: ReportInput): Promise<ReportInput | null> => {
     try {
       const response = await apiClient.put<Partial<ReportInput>>(`/reports/${id}`, report)
+      return toReportInput(response)
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 404) {
+        return null
+      }
+      throw error
+    }
+  },
+
+  listReportRevisionsByExamId: async (id: number | string): Promise<ReportRevisionSummary[]> => {
+    return apiClient.get<ReportRevisionSummary[]>(`/reports/${id}/revisions`)
+  },
+
+  getReportRevisionById: async (
+    id: number | string,
+    revisionId: number | string,
+  ): Promise<ReportRevisionDetail | null> => {
+    try {
+      return await apiClient.get<ReportRevisionDetail>(`/reports/${id}/revisions/${revisionId}`)
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 404) {
+        return null
+      }
+      throw error
+    }
+  },
+
+  restoreReportRevisionById: async (
+    id: number | string,
+    revisionId: number | string,
+  ): Promise<ReportInput | null> => {
+    try {
+      const response = await apiClient.post<Partial<ReportInput>>(
+        `/reports/${id}/revisions/${revisionId}/restore`,
+      )
       return toReportInput(response)
     } catch (error) {
       if (error instanceof ApiClientError && error.status === 404) {
